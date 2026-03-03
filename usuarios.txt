@@ -1,0 +1,119 @@
+2026-02-17 10:42:36 | ID: 6615658467 | Nombre: Flor | User: @taymix819
+2026-02-17 10:43:34 | ID: 5486057453 | Nombre: Cris 🙂 | User: @Btescr
+2026-02-17 10:43:38 | ID: 6615658467 | Nombre: Flor | User: @taymix819
+2026-02-17 10:46:10 | ID: 5486057453 | Nombre: Cris 🙂 | User: @Btescr
+2026-02-17 11:10:40 | ID: 5486057453 | Nombre: Cris 🙂 | User: @Btescr
+2026-02-17 14:33:46 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-17 19:14:26 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-17 19:36:00 | ID: 7298916475 | Nombre: Ezequiel | @None
+2026-02-18 19:13:22 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-18 19:51:54 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-18 20:06:05 | ID: 8247330320 | Nombre: Rocio | @None
+2026-02-18 20:15:45 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-18 20:21:10 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-18 20:27:14 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-18 20:31:35 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-18 20:32:52 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-18 20:35:46 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-21 10:19:26 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-21 12:16:00 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-21 12:56:32 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-21 13:16:56 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-21 14:00:46 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-21 22:18:50 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-21 22:54:50 | ID: 7121293711 | Nombre: Mariana | @MarianaNarbaja
+2026-02-23 08:38:46 | ID: 7994642212 | Nombre: Ferfiorenzo | @None
+2026-02-23 08:38:46 | ID: 7994642212 | Nombre: Ferfiorenzo | @None
+2026-02-23 08:38:49 | ID: 7994642212 | Nombre: Ferfiorenzo | @None
+2026-02-23 08:40:18 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-23 21:05:47 | ID: 605562529 | Nombre: Manuel | @manueledro
+2026-02-23 21:05:49 | ID: 605562529 | Nombre: Manuel | @manueledro
+2026-02-23 21:06:34 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-23 21:28:42 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-23 21:39:48 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-23 21:47:49 | ID: 6096649761 | Nombre: Leila | @Leila_joanna
+2026-02-23 21:52:36 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-23 21:59:03 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-23 21:59:40 | ID: 6772507864 | Nombre: Eliana | @Elianarojas93
+2026-02-23 22:04:34 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-23 22:05:26 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-23 22:05:30 | ID: 5210639182 | Nombre: Aarón | @None
+2026-02-23 22:23:27 | ID: 5242711619 | Nombre: Milagros | @None
+2026-02-23 22:28:26 | ID: 164474633 | Nombre: Pablo | @pablovannini
+2026-02-23 22:29:43 | ID: 7661509252 | Nombre: Oscar | @None
+2026-02-23 22:31:36 | ID: 925550054 | Nombre: D@y! | @None
+2026-02-23 22:32:05 | ID: 1062596040 | Nombre: Rodolfo | @None
+2026-02-23 22:32:58 | ID: 1332010136 | Nombre: Pilar | @None
+2026-02-23 22:33:26 | ID: 1332010136 | Nombre: Pilar | @None
+2026-02-23 22:40:55 | ID: 7781312614 | Nombre: Facundo | @None
+2026-02-23 22:47:24 | ID: 5818292565 | Nombre: Rocio | @None
+2026-02-23 22:48:03 | ID: 8592783382 | Nombre: Gaby | @None
+2026-02-23 22:48:24 | ID: 8629284685 | Nombre: Gabriela | @None
+2026-02-23 22:54:37 | ID: 7652752519 | Nombre: Francisco | @None
+2026-02-23 22:58:07 | ID: 6761785552 | Nombre: ... | @None
+2026-02-23 22:58:55 | ID: 1706824359 | Nombre: Yo | @Sptga53
+2026-02-23 23:01:12 | ID: 7116810645 | Nombre: Evagelina | @None
+2026-02-23 23:13:53 | ID: 6934260164 | Nombre: Cecilia | @None
+2026-02-23 23:18:50 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-23 23:20:14 | ID: 1295292037 | Nombre: Cintia | @Cintiavega10
+2026-02-23 23:29:20 | ID: 6102978620 | Nombre: Carlos | @Lezcanocarlos
+2026-02-23 23:30:33 | ID: 6140323405 | Nombre: Martu | @marti9900
+2026-02-23 23:46:10 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-23 23:47:32 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-24 01:33:07 | ID: 6408971633 | Nombre: Jesi | @None
+2026-02-24 05:17:01 | ID: 1489996381 | Nombre: Feli | @L_ffeli
+2026-02-24 08:50:06 | ID: 8592950759 | Nombre: Albina | @None
+2026-02-24 09:30:53 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-24 11:26:58 | ID: 1757352473 | Nombre: Gari | @ggggggggari
+2026-02-24 11:29:00 | ID: 1261024411 | Nombre: susu | @None
+2026-02-24 11:31:22 | ID: 2027915131 | Nombre: Esteban | @Esteban84ok
+2026-02-24 11:51:16 | ID: 7994642212 | Nombre: Ferfiorenzo | @None
+2026-02-24 11:52:16 | ID: 7994642212 | Nombre: Ferfiorenzo | @None
+2026-02-24 12:20:36 | ID: 8431036311 | Nombre: .. | @None
+2026-02-24 13:09:19 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-24 13:10:03 | ID: 7121293711 | Nombre: Mariana | @MarianaNarbaja
+2026-02-24 13:48:00 | ID: 7000979805 | Nombre: Cintia | @None
+2026-02-24 14:24:20 | ID: 5920125745 | Nombre: Guillermina | @None
+2026-02-24 14:24:20 | ID: 5920125745 | Nombre: Guillermina | @None
+2026-02-24 14:24:22 | ID: 104490023 | Nombre: Maxi | @maxicastro
+2026-02-24 14:36:56 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-24 14:46:18 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-24 14:52:18 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-24 14:57:22 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-24 15:17:37 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-24 15:20:56 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-24 16:43:53 | ID: 7121293711 | Nombre: Mariana | @MarianaNarbaja
+2026-02-24 16:43:55 | ID: 7121293711 | Nombre: Mariana | @MarianaNarbaja
+2026-02-24 16:44:21 | ID: 7121293711 | Nombre: Mariana | @MarianaNarbaja
+2026-02-24 16:44:44 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-24 16:46:56 | ID: 7121293711 | Nombre: Mariana | @MarianaNarbaja
+2026-02-24 16:51:37 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-24 17:05:02 | ID: 7639190797 | Nombre: Araceli | @acmoyano
+2026-02-24 17:05:05 | ID: 7639190797 | Nombre: Araceli | @acmoyano
+2026-02-24 17:05:13 | ID: 7639190797 | Nombre: Araceli | @acmoyano
+2026-02-24 17:21:48 | ID: 7121293711 | Nombre: Mariana | @MarianaNarbaja
+2026-02-24 17:22:21 | ID: 7121293711 | Nombre: Mariana | @MarianaNarbaja
+2026-02-24 17:27:09 | ID: 7121293711 | Nombre: Mariana | @MarianaNarbaja
+2026-02-24 17:35:23 | ID: 7121293711 | Nombre: Mariana | @MarianaNarbaja
+2026-02-24 17:35:36 | ID: 7121293711 | Nombre: Mariana | @MarianaNarbaja
+2026-02-24 20:28:23 | ID: 5952718350 | Nombre: Julian | @None
+2026-02-24 20:41:21 | ID: 8558403351 | Nombre: Sonia | @None
+2026-02-24 21:02:09 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-24 21:51:12 | ID: 5776832107 | Nombre: soff | @soff_lhs
+2026-02-24 22:04:33 | ID: 5514246422 | Nombre: abril | @None
+2026-02-24 22:21:11 | ID: 1716516404 | Nombre: Sebas | @verasebastian
+2026-02-24 23:12:10 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-24 23:47:15 | ID: 6055340198 | Nombre: Emi | @None
+2026-02-25 11:23:41 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-25 12:47:11 | ID: 5180737875 | Nombre: 🇦🇷 @BrianCasas Каса Браян_ESP  | @BrianCasas
+2026-02-25 13:16:21 | ID: 5227172281 | Nombre: Mar | @daphnequeen_90
+2026-02-25 13:36:41 | ID: 5227172281 | Nombre: Mar | @daphnequeen_90
+2026-02-25 19:05:49 | ID: 1062596040 | Nombre: Rodolfo | @None
+2026-02-25 19:05:50 | ID: 1062596040 | Nombre: Rodolfo | @None
+2026-02-26 10:39:06 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-02-26 19:11:50 | ID: 8000670592 | Nombre: JD | @None
+2026-03-01 19:17:09 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-03-01 19:20:30 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr
+2026-03-03 11:07:02 | ID: 6615658467 | Nombre: Flor | @taymix819
+2026-03-03 13:14:00 | ID: 8592783382 | Nombre: Gaby | @None
+2026-03-03 14:00:24 | ID: 5486057453 | Nombre: Cris 🙂 | @Btescr

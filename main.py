@@ -1,134 +1,203 @@
+import os
+from dotenv import load_dotenv
 import telebot
 from telebot import types
 import requests
+import time
+from openai import OpenAI
+from info_unpaz import DATOS_TECNICATURA 
 
-# 1. Configuración de Google Sheets (Para Horarios, Calendario y Mensajes)
-API_KEY_GOOGLE = 'AIzaSyAAY-9zAeUAE4-cePHtWEZ9MJrNUkZwZ64'
-SPREADSHEET_ID = '1DNRXgRYrytRVMqddNlQlFJKuNYUVCUHVzXOsHjrG2xc'
+# 1. Cargar variables de entorno y Configuración de APIs
+load_dotenv()
 
-URL_MENSAJES = f"https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}/values/bot_mensajes!A1:C20?key={API_KEY_GOOGLE}"
+TOKEN = os.getenv('TELEGRAM_TOKEN')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+API_KEY_GOOGLE = os.getenv('GOOGLE_API_KEY')
+
+# Validación de seguridad
+if not TOKEN or not OPENAI_API_KEY:
+    print("❌ Error: No se encontraron las credenciales en el archivo .env")
+    exit()
+
+bot = telebot.TeleBot(TOKEN)
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# Configuración Google Sheets
+SPREADSHEET_ID = '1DNRXgRYrytrVMqddNlQlFJKuNYUVCUHVzXOsHjrG2xc'
 URL_HORARIOS = f"https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}/values/Horarios!A2:E50?key={API_KEY_GOOGLE}"
-URL_CALENDARIO = f"https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}/values/Calendario!A2:D100?key={API_KEY_GOOGLE}"
 
-# 2. DATA DEL PLAN DE ESTUDIOS (Cargada directamente para que no falle)
-DATA_PLAN = {
-    "Primer Año": [
-        "Tecnología y Sociedad (4hs)", "Inglés I (4hs)", "Principios de Economía (4hs)",
-        "Comunicación Institucional (4hs)", "Internet: Infraestructura y redes (4hs)",
-        "Semántica de las interfaces (4hs)", "Introducción al comercio electrónico (4hs)",
-        "Usabilidad, seguridad y Estándares Web (4hs)", "Inglés II (4hs)"
-    ],
-    "Segundo Año": [
-        "Investigación de mercado (4hs)", "Marco legal de negocios electrónicos (4hs)",
-        "Gestión del conocimiento (4hs)", "Desarrollo Web (4hs)",
-        "Formulación, incubación y evaluación de proyectos (4hs)", "Métricas del mundo digital (4hs)",
-        "Desarrollo de Productos y Servicios (4hs)", "Taller de Comunicación (4hs)",
-        "Desarrollos para Dispositivos móviles (4hs)"
-    ],
-    "Tercer Año": [
-        "Calidad y Servicio al Cliente (4hs)", "Marketing digital (4hs)",
-        "Taller de Práctica Integradora (4hs)", "Competencias emprendedoras (4hs)",
-        "Gestión de Proyectos (4hs)"
-    ]
+# 2. DATA INSTITUCIONAL
+DATA_CALENDARIO = {
+    "Ingresantes": "📝 **INFO INGRESANTES:**\n🔹 Inscripción CIU: 06/11 al 28/11/2025\n🔹 Desarrollo CIU: 02/02 al 28/02/2026",
+    "Primer Semestre": "1️⃣ **1er SEMESTRE 2026:**\n🔹 Inscripción: 18/02 y 19/02\n🔹 Inicio clases: 09/03",
+    "Segundo Semestre": "2️⃣ **2do SEMESTRE 2026:**\n🔹 Inscripción: 22/07 y 23/07\n🔹 Inicio clases: 10/08",
+    "Verano 2027": "☀️ **VERANO 2027:**\n🔹 Cursada: Febrero 2027"
 }
 
-# 3. Configuración del Bot
-TOKEN = '8515265096:AAHTqfGgxGxlBOAQLoNEbokYpW68PDri4IY'
-bot = telebot.TeleBot(TOKEN)
+DATA_PLAN = {
+    "Primer Año": ["Tecnología y Sociedad (4hs)", "Inglés I (4hs)", "Principios de Economía (4hs)", "Comunicación Institucional (4hs)", "Internet: Infraestructura y redes (4hs)", "Semántica de las interfaces (4hs)", "Introducción al comercio electrónico (4hs)", "Usabilidad, seguridad y Estándares Web (4hs)", "Inglés II (4hs)"],
+    "Segundo Año": ["Investigación de mercado (4hs)", "Marco legal (4hs)", "Gestión del conocimiento (4hs)", "Desarrollo Web (4hs)", "Proyectos (4hs)", "Métricas (4hs)", "Productos y Servicios (4hs)", "Taller de Comunicación (4hs)", "Dispositivos móviles (4hs)"],
+    "Tercer Año": ["Calidad y Servicio al Cliente (4hs)", "Marketing digital (4hs)", "Taller de Práctica Integradora (4hs)", "Competencias emprendedoras (4hs)", "Gestión de Proyectos (4hs)"]
+}
+
+DATA_BOT_INFO = {
+    "bot_equivalencias": "⚖️ **Equivalencias:** Trámite formal del 01/04 al 10/04/2026.",
+    "bot_boleto": "🚌 **Boleto Estudiantil:** Gestión vía SIU Guaraní para alumnos regulares.",
+    "bot_certificados": "📄 **Certificaciones:** Emisión digital de certificados vía SIU Guaraní.",
+    "bot_inscripcion": "✍️ **Inscripción:** Únicamente por SIU Guaraní en fechas publicadas."
+}
+
+# 3. Funciones de Soporte (REGISTRO PERMANENTE)
+def registrar_usuario(user):
+    try:
+        with open("usuarios.txt", "a", encoding="utf-8") as f:
+            fecha = time.strftime("%Y-%m-%d %H:%M:%S")
+            linea = f"{fecha} | ID: {user.id} | Nombre: {user.first_name} | @{user.username}\n"
+            f.write(linea)
+            f.flush()
+        print(f"📈 REGISTRO GUARDADO EN HOJA: {user.first_name} ({fecha})")
+    except Exception as e:
+        print(f"Error grabando usuario: {e}")
+
+def responder_ia(pregunta):
+    contexto_machete = f"{DATOS_TECNICATURA}\nCALENDARIO: {DATA_CALENDARIO}\nPLAN: {DATA_PLAN}"
+    instruccion_sistema = (
+        "Usted es el Asistente Virtual de la Comunidad TUCE - UNPAZ. "
+        "Si le preguntan quién lo creó o quién es su autor, responda que fue desarrollado por la agencia Bytes Creativos. "
+        "Bajo ninguna circunstancia diga que es un bot oficial. "
+        "Responda de forma directa usando esta info: " + contexto_machete
+    )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": instruccion_sistema},
+                {"role": "user", "content": pregunta}
+            ],
+            max_tokens=300, temperature=0.1
+        )
+        return response.choices[0].message.content
+    except:
+        return "Servicio no disponible actualmente."
 
 def obtener_datos(url):
     try:
         response = requests.get(url).json()
         return response.get('values', [])
-    except:
-        return []
+    except: return []
 
+# 4. Manejadores de Interfaz
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
+    registrar_usuario(message.from_user)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn1 = types.KeyboardButton("📅 Horarios")
-    btn2 = types.KeyboardButton("🗓️ Calendario")
-    btn3 = types.KeyboardButton("📍 Sedes")
-    btn4 = types.KeyboardButton("🖥️ Gestión Alumnos")
-    markup.add(btn1, btn2, btn3, btn4)
+    markup.add("📅 Horarios", "🗓️ Calendario", "📍 Sedes", "🖥️ Gestión Alumnos", "🤖 Bot TUCE")
     
-    datos = obtener_datos(URL_MENSAJES)
-    saludo = datos[1][2].replace("\\n", "\n") if len(datos) > 1 else "¡Hola! Bienvenido al Bot TUCE de la UNPAZ."
-    bot.send_message(message.chat.id, saludo, reply_markup=markup)
+    saludo = (
+        "Bienvenido al **Bot de la Comunidad TUCE - UNPAZ**.\n\n"
+        "Seleccione una opción del menú para acceder a la información institucional."
+    )
+    bot.send_message(message.chat.id, saludo, reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: True)
-def manejar_mensajes_principales(message):
+def manejar_mensajes(message):
     if message.text == "📅 Horarios":
         filas = obtener_datos(URL_HORARIOS)
-        if not filas:
-            bot.send_message(message.chat.id, "❌ No hay horarios cargados.")
-            return
-        materias_unicas = sorted(list(set([f[0] for f in filas if f])))
+        materias = sorted(list(set([f[0] for f in filas if f])))
         markup = types.InlineKeyboardMarkup(row_width=1)
-        for mat in materias_unicas:
+        for mat in materias:
             markup.add(types.InlineKeyboardButton(text=mat, callback_data=f"hor_{mat}"))
-        bot.send_message(message.chat.id, "📚 **¿De qué materia querés ver el horario?**", reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(message.chat.id, "📚 **Seleccione asignatura:**", reply_markup=markup)
 
     elif message.text == "🗓️ Calendario":
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(
-            types.InlineKeyboardButton("📝 Ingresantes", callback_data="cal_Ingresantes"),
-            types.InlineKeyboardButton("1️⃣ Primer Semestre", callback_data="cal_Primer Semestre"),
-            types.InlineKeyboardButton("2️⃣ Segundo Semestre", callback_data="cal_Segundo Semestre"),
+            types.InlineKeyboardButton("📝 Ingresantes", callback_data="cal_Ingresantes"), 
+            types.InlineKeyboardButton("1️⃣ 1er Semestre", callback_data="cal_Primer Semestre"), 
+            types.InlineKeyboardButton("2️⃣ 2do Semestre", callback_data="cal_Segundo Semestre"), 
             types.InlineKeyboardButton("☀️ Verano 2027", callback_data="cal_Verano 2027")
         )
-        bot.send_message(message.chat.id, "🗓️ **Calendario Académico**", reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(message.chat.id, "🗓️ **Calendario Académico:**", reply_markup=markup)
+
+    elif message.text == "🤖 Bot TUCE":
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("⚖️ Equivalencias", callback_data="bot_equivalencias"),
+            types.InlineKeyboardButton("🚌 Boleto Estudiantil", callback_data="bot_boleto"),
+            types.InlineKeyboardButton("📄 Certificados", callback_data="bot_certificados"),
+            types.InlineKeyboardButton("✍️ Inscripción", callback_data="bot_inscripcion"),
+            types.InlineKeyboardButton("💬 Consultar a la IA", callback_data="ia_modo")
+        )
+        bot.send_message(message.chat.id, "🤖 **Centro de Asistencia Bot TUCE**", reply_markup=markup)
 
     elif message.text == "📍 Sedes":
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
-            types.InlineKeyboardButton("📍 Sede Alem / Pueyrredón", callback_data="sede_alem"),
+            types.InlineKeyboardButton("📍 Sede Alem", callback_data="sede_alem"), 
             types.InlineKeyboardButton("📍 Sede Arregui", callback_data="sede_arregui")
         )
-        bot.send_message(message.chat.id, "🏢 **Seleccioná la sede:**", reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(message.chat.id, "🏢 **Sedes:**", reply_markup=markup)
 
     elif message.text == "🖥️ Gestión Alumnos":
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
-            types.InlineKeyboardButton("🎓 Campus Virtual", callback_data="gest_campus"),
-            types.InlineKeyboardButton("🖥️ SIU Guaraní", callback_data="gest_siu"),
-            types.InlineKeyboardButton("📄 Plan de Estudios", callback_data="plan_info")
+            types.InlineKeyboardButton("🎓 Campus Virtual", url="https://campusvirtual.unpaz.edu.ar/"),
+            types.InlineKeyboardButton("🖥️ SIU Guaraní", url="https://estudiantes.unpaz.edu.ar/autogestion/"),
+            types.InlineKeyboardButton("📄 Plan de Estudios", callback_data="plan_info"),
+            types.InlineKeyboardButton("📩 Contactos y Mesa de Ayuda", callback_data="ver_contactos")
         )
-        bot.send_message(message.chat.id, "🚀 **Gestión de Alumnos:**", reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(message.chat.id, "🚀 **Gestión Alumnos:**", reply_markup=markup)
+    
+    else:
+        bot.send_chat_action(message.chat.id, 'typing')
+        bot.reply_to(message, responder_ia(message.text))
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_global(call):
-    # SECCIÓN PLAN DE ESTUDIOS (DATA FIJA)
-    if call.data == "plan_info":
-        texto = (
-            "📄 **Plan de Estudios - TUCE**\n\n"
-            "🎓 **Título Intermedio:** Técnica/o Universitaria/o en Comercio Electrónico.\n\n"
-            "⏳ **Duración total:** 3 años (1600 horas totales).\n\n"
-            "👤 **Perfil del egresado:** Capacitado para gestionar tiendas online, "
-            "interactuar con equipos de diseño/desarrollo y administrar proyectos propios.\n\n"
-            "¿Deseás ver las materias de un año específico?"
-        )
+    if call.data.startswith("cal_"):
+        bot.edit_message_text(DATA_CALENDARIO[call.data.replace("cal_", "")], call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+    elif call.data.startswith("bot_"):
+        bot.edit_message_text(DATA_BOT_INFO[call.data], call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+    
+    elif call.data == "ver_contactos":
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
-            types.InlineKeyboardButton("Primer Año", callback_data="anio_Primer Año"),
-            types.InlineKeyboardButton("Segundo Año", callback_data="anio_Segundo Año"),
-            types.InlineKeyboardButton("Tercer Año", callback_data="anio_Tercer Año")
+            types.InlineKeyboardButton("🤝 Acceso y Apoyo", callback_data="con_acceso"),
+            types.InlineKeyboardButton("📝 Consultas CIU", callback_data="con_ciu"),
+            types.InlineKeyboardButton("👤 Consultas Estudiantes", callback_data="con_est"),
+            types.InlineKeyboardButton("💻 Soporte SIU Guaraní", callback_data="con_siu"),
+            types.InlineKeyboardButton("🌐 UNPAZ Virtual", callback_data="con_virt"),
+            types.InlineKeyboardButton("💜 ORVIG (Género)", callback_data="con_orvig")
         )
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=texto, reply_markup=markup, parse_mode="Markdown")
+        bot.edit_message_text("📩 **Seleccione el área de consulta:**", call.message.chat.id, call.message.message_id, reply_markup=markup)
 
+    elif call.data.startswith("con_"):
+        contactos = {
+            "acceso": "🤝 **Acceso y Apoyo:** 📩 accesoapoyo@unpaz.edu.ar",
+            "ciu": "📝 **Consultas CIU:** 📩 ciu@unpaz.edu.ar",
+            "est": "👤 **Consultas Estudiantes:** 📩 consultasestudiantes@unpaz.edu.ar",
+            "siu": "💻 **Soporte SIU Guaraní:** 📩 soporteinscripciones@unpaz.edu.ar",
+            "virt": "🌐 **UNPAZ Virtual:** 📩 formacionvirtual@unpaz.edu.ar",
+            "orvig": "💜 **ORVIG:** 📩 orvig@unpaz.edu.ar"
+        }
+        ref = call.data.replace("con_", "")
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("⬅️ Volver", callback_data="ver_contactos"))
+        bot.edit_message_text(contactos[ref], call.message.chat.id, call.message.message_id, reply_markup=markup)
+
+    elif call.data == "ia_modo":
+        bot.send_message(call.message.chat.id, "💬 **Modo IA activado.** Pregunte lo que necesite:")
+    elif call.data == "plan_info":
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("1º Año", callback_data="anio_Primer Año"), 
+            types.InlineKeyboardButton("2º Año", callback_data="anio_Segundo Año"), 
+            types.InlineKeyboardButton("3º Año", callback_data="anio_Tercer Año")
+        )
+        bot.edit_message_text("📄 **Plan de Estudios**", call.message.chat.id, call.message.message_id, reply_markup=markup)
     elif call.data.startswith("anio_"):
         anio = call.data.replace("anio_", "")
-        materias = DATA_PLAN.get(anio, [])
-        
-        res = f"📚 **Materias de {anio}:**\n\n"
-        for m in materias:
-            res += f"🔹 {m}\n"
-            
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("🔙 Volver", callback_data="plan_info"))
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=res, reply_markup=markup, parse_mode="Markdown")
-
-    # RESTO DE CALLBACKS
+        bot.edit_message_text(f"📚 **Asignaturas {anio}:**\n" + "\n".join(DATA_PLAN[anio]), call.message.chat.id, call.message.message_id)
     elif call.data.startswith("hor_"):
         mat_sel = call.data.replace("hor_", "")
         filas = obtener_datos(URL_HORARIOS)
@@ -136,24 +205,14 @@ def callback_global(call):
         for f in filas:
             if len(f) >= 5 and f[0] == mat_sel:
                 res += f"👥 *Com {f[1]}* | 🗓️ {f[2]} | ⏰ {f[3]} a {f[4]} hs.\n"
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=res, parse_mode="Markdown")
-    elif call.data.startswith("cal_"):
-        per = call.data.replace("cal_", "")
-        filas_cal = obtener_datos(URL_CALENDARIO)
-        info = ""
-        for f in filas_cal:
-            if len(f) >= 4 and f[0].strip() == per:
-                info += f"📌 *{f[2]}*\n🗓️ {f[3]}\n\n"
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"🗓️ **{per}**\n\n{info or 'S/D'}", parse_mode="Markdown")
-    elif call.data == "gest_campus":
-        bot.send_message(call.message.chat.id, "🎓 **Campus:** https://campusvirtual.unpaz.edu.ar/login/index.php")
-    elif call.data == "gest_siu":
-        bot.send_message(call.message.chat.id, "🖥️ **SIU:** https://estudiantes.unpaz.edu.ar/autogestion/")
-    elif call.data == "sede_alem":
-        bot.send_location(call.message.chat.id, -34.5164, -58.7615)
-    elif call.data == "sede_arregui":
-        bot.send_location(call.message.chat.id, -34.5208, -58.7758)
+        bot.edit_message_text(res, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+    elif call.data == "sede_alem": bot.send_location(call.message.chat.id, -34.5164, -58.7615)
+    elif call.data == "sede_arregui": bot.send_location(call.message.chat.id, -34.5208, -58.7758)
 
-bot.remove_webhook()
-print("¡Bot UNPAZ con Plan Blindado Activo!")
-bot.infinity_polling()
+while True:
+    try:
+        print("🚀 Bot Comunidad TUCE Activo")
+        bot.infinity_polling(timeout=40)
+    except Exception as e:
+        print(f"Error en el bot: {e}")
+        time.sleep(10)
