@@ -7,6 +7,25 @@ from openai import OpenAI
 from info_unpaz import DATOS_TECNICATURA 
 from materias_db import LISTA_HORARIOS # <--- Importamos la data separada
 
+# --- BLOQUE PARA MANTENER EL BOT 24/7 EN KOYEB ---
+import http.server
+import socketserver
+import threading
+
+def run_health_server():
+    """Crea un servidor web básico en el puerto 8000 para que Koyeb no detenga el bot."""
+    PORT = 8000
+    Handler = http.server.SimpleHTTPRequestHandler
+    # Permitimos reutilizar la dirección para evitar errores de puerto ocupado al reiniciar
+    socketserver.TCPServer.allow_reuse_address = True
+    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+        print(f"🌍 Servidor de salud activo en puerto {PORT}")
+        httpd.serve_forever()
+
+# Iniciamos el servidor en un hilo separado (background)
+threading.Thread(target=run_health_server, daemon=True).start()
+# ------------------------------------------------
+
 # 1. Cargar variables de entorno y Configuración de APIs
 base_dir = os.path.dirname(__file__)
 dotenv_path = os.path.join(base_dir, '.env')
@@ -198,10 +217,11 @@ def callback_global(call):
     elif call.data == "sede_alem": bot.send_location(call.message.chat.id, -34.5164, -58.7615)
     elif call.data == "sede_arregui": bot.send_location(call.message.chat.id, -34.5208, -58.7758)
 
-while True:
-    try:
-        print("🚀 Bot Comunidad TUCE Activo (Data Separada)")
-        bot.infinity_polling(timeout=40)
-    except Exception as e:
-        print(f"Error en el bot: {e}")
-        time.sleep(10)
+if __name__ == "__main__":
+    while True:
+        try:
+            print("🚀 Bot Comunidad TUCE Activo (Data Separada)")
+            bot.infinity_polling(timeout=40)
+        except Exception as e:
+            print(f"Error en el bot: {e}")
+            time.sleep(10)
