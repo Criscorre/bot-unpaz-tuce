@@ -2,29 +2,27 @@ import os
 from dotenv import load_dotenv
 import telebot
 from telebot import types
-import requests
 import time
 from openai import OpenAI
 from info_unpaz import DATOS_TECNICATURA 
+from materias_db import LISTA_HORARIOS # <--- Importamos la data separada
 
 # 1. Cargar variables de entorno y Configuración de APIs
-load_dotenv()
+base_dir = os.path.dirname(__file__)
+dotenv_path = os.path.join(base_dir, '.env')
+load_dotenv(dotenv_path)
 
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-API_KEY_GOOGLE = os.getenv('GOOGLE_API_KEY')
 
-# Validación de seguridad
 if not TOKEN or not OPENAI_API_KEY:
     print("❌ Error: No se encontraron las credenciales en el archivo .env")
     exit()
+else:
+    print(f"✅ Credenciales detectadas. Iniciando bot de la UNPAZ...")
 
 bot = telebot.TeleBot(TOKEN)
 client = OpenAI(api_key=OPENAI_API_KEY)
-
-# Configuración Google Sheets
-SPREADSHEET_ID = '1DNRXgRYrytrVMqddNlQlFJKuNYUVCUHVzXOsHjrG2xc'
-URL_HORARIOS = f"https://sheets.googleapis.com/v4/spreadsheets/{SPREADSHEET_ID}/values/Horarios!A2:E50?key={API_KEY_GOOGLE}"
 
 # 2. DATA INSTITUCIONAL
 DATA_CALENDARIO = {
@@ -47,7 +45,7 @@ DATA_BOT_INFO = {
     "bot_inscripcion": "✍️ **Inscripción:** Únicamente por SIU Guaraní en fechas publicadas."
 }
 
-# 3. Funciones de Soporte (REGISTRO PERMANENTE)
+# 3. Funciones de Soporte
 def registrar_usuario(user):
     try:
         with open("usuarios.txt", "a", encoding="utf-8") as f:
@@ -55,7 +53,7 @@ def registrar_usuario(user):
             linea = f"{fecha} | ID: {user.id} | Nombre: {user.first_name} | @{user.username}\n"
             f.write(linea)
             f.flush()
-        print(f"📈 REGISTRO GUARDADO EN HOJA: {user.first_name} ({fecha})")
+        print(f"📈 REGISTRO GUARDADO: {user.first_name}")
     except Exception as e:
         print(f"Error grabando usuario: {e}")
 
@@ -70,40 +68,26 @@ def responder_ia(pregunta):
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": instruccion_sistema},
-                {"role": "user", "content": pregunta}
-            ],
+            messages=[{"role": "system", "content": instruccion_sistema}, {"role": "user", "content": pregunta}],
             max_tokens=300, temperature=0.1
         )
         return response.choices[0].message.content
     except:
         return "Servicio no disponible actualmente."
 
-def obtener_datos(url):
-    try:
-        response = requests.get(url).json()
-        return response.get('values', [])
-    except: return []
-
 # 4. Manejadores de Interfaz
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     registrar_usuario(message.from_user)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add("📅 Horarios", "🗓️ Calendario", "📍 Sedes", "🖥️ Gestión Alumnos", "🤖 Bot TUCE")
-    
-    saludo = (
-        "Bienvenido al **Bot de la Comunidad TUCE - UNPAZ**.\n\n"
-        "Seleccione una opción del menú para acceder a la información institucional."
-    )
+    markup.add("📚 Materias horarios", "🗓️ Calendario", "📍 Sedes", "🖥️ Gestión Alumnos", "🤖 Bot TUCE")
+    saludo = "Bienvenido al **Bot de la Comunidad TUCE - UNPAZ**.\n\nSeleccione una opción del menú."
     bot.send_message(message.chat.id, saludo, reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: True)
 def manejar_mensajes(message):
-    if message.text == "📅 Horarios":
-        filas = obtener_datos(URL_HORARIOS)
-        materias = sorted(list(set([f[0] for f in filas if f])))
+    if message.text == "📚 Materias horarios":
+        materias = sorted(list(set([f[0] for f in LISTA_HORARIOS])))
         markup = types.InlineKeyboardMarkup(row_width=1)
         for mat in materias:
             markup.add(types.InlineKeyboardButton(text=mat, callback_data=f"hor_{mat}"))
@@ -132,10 +116,7 @@ def manejar_mensajes(message):
 
     elif message.text == "📍 Sedes":
         markup = types.InlineKeyboardMarkup(row_width=1)
-        markup.add(
-            types.InlineKeyboardButton("📍 Sede Alem", callback_data="sede_alem"), 
-            types.InlineKeyboardButton("📍 Sede Arregui", callback_data="sede_arregui")
-        )
+        markup.add(types.InlineKeyboardButton("📍 Sede Alem", callback_data="sede_alem"), types.InlineKeyboardButton("📍 Sede Arregui", callback_data="sede_arregui"))
         bot.send_message(message.chat.id, "🏢 **Sedes:**", reply_markup=markup)
 
     elif message.text == "🖥️ Gestión Alumnos":
@@ -147,7 +128,6 @@ def manejar_mensajes(message):
             types.InlineKeyboardButton("📩 Contactos y Mesa de Ayuda", callback_data="ver_contactos")
         )
         bot.send_message(message.chat.id, "🚀 **Gestión Alumnos:**", reply_markup=markup)
-    
     else:
         bot.send_chat_action(message.chat.id, 'typing')
         bot.reply_to(message, responder_ia(message.text))
@@ -156,6 +136,7 @@ def manejar_mensajes(message):
 def callback_global(call):
     if call.data.startswith("cal_"):
         bot.edit_message_text(DATA_CALENDARIO[call.data.replace("cal_", "")], call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+    
     elif call.data.startswith("bot_"):
         bot.edit_message_text(DATA_BOT_INFO[call.data], call.message.chat.id, call.message.message_id, parse_mode="Markdown")
     
@@ -187,6 +168,7 @@ def callback_global(call):
 
     elif call.data == "ia_modo":
         bot.send_message(call.message.chat.id, "💬 **Modo IA activado.** Pregunte lo que necesite:")
+
     elif call.data == "plan_info":
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
@@ -195,23 +177,30 @@ def callback_global(call):
             types.InlineKeyboardButton("3º Año", callback_data="anio_Tercer Año")
         )
         bot.edit_message_text("📄 **Plan de Estudios**", call.message.chat.id, call.message.message_id, reply_markup=markup)
+
     elif call.data.startswith("anio_"):
         anio = call.data.replace("anio_", "")
         bot.edit_message_text(f"📚 **Asignaturas {anio}:**\n" + "\n".join(DATA_PLAN[anio]), call.message.chat.id, call.message.message_id)
+
     elif call.data.startswith("hor_"):
         mat_sel = call.data.replace("hor_", "")
-        filas = obtener_datos(URL_HORARIOS)
         res = f"📍 **Horarios: {mat_sel}**\n\n"
-        for f in filas:
-            if len(f) >= 5 and f[0] == mat_sel:
-                res += f"👥 *Com {f[1]}* | 🗓️ {f[2]} | ⏰ {f[3]} a {f[4]} hs.\n"
+        for f in LISTA_HORARIOS:
+            if f[0] == mat_sel:
+                res += f"👥 *Com {f[1]}* | 🗓️ {f[2]} | ⏰ {f[3][:-3]} a {f[4][:-3]} hs.\n"
+                res += f"🏢 **Aula:** {f[8]}\n"
+                res += f"💻 **Mod:** {f[5]}\n"
+                res += f"📅 **Inicio Presencial:** {f[6]}\n"
+                if f[7] != "//": res += f"🌐 **Inicio Virtual:** {f[7]}\n"
+                res += "----------------------------\n"
         bot.edit_message_text(res, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+
     elif call.data == "sede_alem": bot.send_location(call.message.chat.id, -34.5164, -58.7615)
     elif call.data == "sede_arregui": bot.send_location(call.message.chat.id, -34.5208, -58.7758)
 
 while True:
     try:
-        print("🚀 Bot Comunidad TUCE Activo")
+        print("🚀 Bot Comunidad TUCE Activo (Data Separada)")
         bot.infinity_polling(timeout=40)
     except Exception as e:
         print(f"Error en el bot: {e}")
