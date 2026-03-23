@@ -57,14 +57,11 @@ votos_cache = {}
 # ─────────────────────────────────────────────
 
 def normalizar_categoria(texto: str) -> str:
-    """Elimina emojis para comparación robusta entre bot y Sheet."""
+    """Elimina emojis y símbolos para comparación ultra-robusta."""
     if not texto: return ""
-    resultado = ""
-    for char in texto:
-        cat = unicodedata.category(char)
-        if not cat.startswith("So") and not cat.startswith("Sm"):
-            resultado += char
-    return resultado.strip()
+    # Esta versión quita cualquier cosa que no sea letra, número o espacio
+    resultado = re.sub(r'[^\w\s]', '', texto) 
+    return resultado.strip().lower()
 
 def normalizar_link(texto: str) -> str:
     if not texto or texto.lower() in ["no tengo", "sin web", ""]:
