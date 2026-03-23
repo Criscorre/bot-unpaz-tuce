@@ -24,8 +24,7 @@ FIELD_VOTER_ID   = "entry.1171672904"
 FIELD_TALENTO_ID = "entry.1795842410"
 FIELD_ESTRELLAS  = "entry.399597954"
 FIELD_FECHA_VOTO = "entry.1646839553"
-
-# --- SHEETS CSV PÚBLICAS ---
+# --- SHEETS CSV PÚBLICAS v2 ---
 SHEET_CSV_URL   = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT8DocuqEQ1B64cPxj7QdvRhwGm33xTSiQ5jbvV573ZMw65knP6zR_fWcIUYjjFbpEooFxhh1KDdAIA/pub?gid=223881563&single=true&output=csv"
 SHEET_VOTOS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQmRdcceKVNXJTZYfPsKKU4S7tje_6E52PjZY6pxAaov0LMC2AukxKBvmVW2b_q0lLuaW9D_X3Gqt9i/pub?gid=912500209&single=true&output=csv"
 
