@@ -149,12 +149,36 @@ def paso_web(bot, message):
 def paso_foto(bot, message):
     uid = message.from_user.id
     if uid not in estados_talentos: return False
-    fid = message.photo[-1].file_id if message.content_type == "photo" else "sin_foto"
+    
+    # Si manda foto la guardamos, si manda texto (como "Listo" u "Omitir") va sin foto
+    if message.content_type == "photo":
+        fid = message.photo[-1].file_id
+    else:
+        fid = "sin_foto"
+        
     estados_talentos[uid]["datos"]["foto_id"] = fid
-    db.reference('talentos').child(str(uid)).set(estados_talentos[uid]["datos"])
-    del estados_talentos[uid]
-    bot.send_message(message.chat.id, "🎉 *¡Perfil guardado!* Consultalo en el explorador.")
-    return True
+    
+    try:
+        # Guardamos en Firebase usando el ID de telegram como llave
+        db.reference('talentos').child(str(uid)).set(estados_talentos[uid]["datos"])
+        
+        # Guardamos copia local de los datos para el mensaje final antes de borrar el estado
+        datos_finales = estados_talentos[uid]["datos"]
+        del estados_talentos[uid]
+        
+        bot.send_message(
+            message.chat.id, 
+            f"🎉 *¡Perfil guardado!*\n\n"
+            f"👤 *Nombre:* {datos_finales.get('nombre')}\n"
+            f"🏷️ *Categoría:* {datos_finales.get('categoria')}\n\n"
+            "Ya podés consultarlo en el explorador de talentos.",
+            parse_mode="Markdown"
+        )
+        return True
+    except Exception as e:
+        print(f"❌ Error al guardar en Firebase: {e}")
+        bot.send_message(message.chat.id, "⚠️ Hubo un error al guardar tu perfil. Reintentá en unos momentos.")
+        return False
 
 # ─────────────────────────────────────────────
 #  VISTAS
