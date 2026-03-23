@@ -82,7 +82,6 @@ DATA_BOT_INFO = {
     "bot_inscripcion":   "✍️ *Inscripción:* Únicamente por SIU Guaraní en fechas publicadas."
 }
 
-# URLs clave de la UNPAZ
 URLS_UNPAZ = {
     "tuce":         "https://unpaz.edu.ar/comercioelectronico",
     "becas":        "https://unpaz.edu.ar/bienestar/becas",
@@ -95,7 +94,6 @@ URLS_UNPAZ = {
 }
 
 def obtener_info_web(url: str) -> str:
-    """Obtiene texto plano de una página UNPAZ. Timeout corto para no demorar al usuario."""
     try:
         import re
         r = requests.get(url, timeout=3, headers={"User-Agent": "Mozilla/5.0"})
@@ -116,15 +114,15 @@ def detectar_url_relevante(pregunta: str) -> str:
         return URLS_UNPAZ["becas"]
     if any(w in p for w in ["pasantía", "pasantias", "trabajo", "empresa"]):
         return URLS_UNPAZ["pasantias"]
-    if any(w in p for w in ["equivalencia", "equivalencias", "convalidar", "materias previas"]):
+    if any(w in p for w in ["equivalencia", "equivalencias", "convalidar"]):
         return URLS_UNPAZ["equivalencias"]
     if any(w in p for w in ["calendario", "fechas", "inscripción", "inscripciones", "cuándo"]):
         return URLS_UNPAZ["calendario"]
-    if any(w in p for w in ["ingreso", "ingresar", "inscribirse", "nuevo", "ingresante", "ciu"]):
+    if any(w in p for w in ["ingreso", "ingresar", "inscribirse", "ingresante", "ciu"]):
         return URLS_UNPAZ["ingreso"]
-    if any(w in p for w in ["reglamento", "régimen", "código de convivencia", "normas"]):
+    if any(w in p for w in ["reglamento", "régimen", "código de convivencia"]):
         return URLS_UNPAZ["reglamento"]
-    if any(w in p for w in ["tuce", "comercio electrónico", "carrera", "tecnicatura", "plan", "materias"]):
+    if any(w in p for w in ["tuce", "comercio electrónico", "carrera", "tecnicatura"]):
         return URLS_UNPAZ["tuce"]
     return ""
 
@@ -160,7 +158,6 @@ def responder_ia(pregunta: str) -> str:
         f"CALENDARIO: {DATA_CALENDARIO}\n"
         f"PLAN DE ESTUDIOS: {DATA_PLAN}\n"
     )
-
     contexto_web = ""
     url_relevante = detectar_url_relevante(pregunta)
     if url_relevante:
@@ -177,11 +174,9 @@ def responder_ia(pregunta: str) -> str:
         "Si te preguntan quién te creó, decís que fuiste desarrollado por la agencia Bytes Creativos. "
         "No decís que sos un bot oficial de la UNPAZ. "
         "Respondés siempre en español, de forma clara, directa y amigable. "
-        "Cuando tenés información actualizada de la web de la UNPAZ, la usás para responder con precisión. "
         "Si no sabés algo con certeza, recomendás consultar en unpaz.edu.ar o a la mesa de ayuda. "
         "Contexto disponible: " + contexto_base + contexto_web
     )
-
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -197,7 +192,7 @@ def responder_ia(pregunta: str) -> str:
         print(f"Error IA: {e}")
         return "Servicio no disponible actualmente. Consultá en unpaz.edu.ar o escribí a consultasestudiantes@unpaz.edu.ar"
 
-# 4. Manejadores de Interfaz
+# 4. Manejadores
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -214,24 +209,35 @@ def send_welcome(message):
         reply_markup=markup, parse_mode="Markdown"
     )
 
-@bot.message_handler(func=lambda message: True)
+# ── Handler principal — acepta texto Y fotos ──
+@bot.message_handler(content_types=['text', 'photo'])
 def manejar_mensajes(message):
     user_id = message.from_user.id
 
-    # Interceptar flujo Talentos
+    # Interceptar flujo Talentos primero
     if user_id in estados_talentos:
         paso = estados_talentos[user_id]["paso"]
-        if paso == "foto" and paso_foto(bot, message):
-            return
-        elif paso == "nombre" and paso_nombre(bot, message):
-            return
-        elif paso == "username" and paso_username(bot, message):
-            return
-        elif paso == "bio" and paso_bio(bot, message):
-            return
-        elif paso == "web" and paso_web(bot, message):
-            return
+        if paso == "foto":
+            if paso_foto(bot, message):
+                return
+        elif paso == "nombre" and message.content_type == "text":
+            if paso_nombre(bot, message):
+                return
+        elif paso == "username" and message.content_type == "text":
+            if paso_username(bot, message):
+                return
+        elif paso == "bio" and message.content_type == "text":
+            if paso_bio(bot, message):
+                return
+        elif paso == "web" and message.content_type == "text":
+            if paso_web(bot, message):
+                return
 
+    # Si es foto pero no estamos en flujo talentos, ignorar
+    if message.content_type == "photo":
+        return
+
+    # ── Menú principal ──
     if message.text == "📚 Materias horarios":
         materias = sorted(list(set([f[0] for f in LISTA_HORARIOS])))
         markup = types.InlineKeyboardMarkup(row_width=1)
@@ -342,7 +348,6 @@ def callback_global(call):
         paso_anio(bot, call, call.data.replace("tal_anio_", ""))
         return
 
-    # ── Talentos explorar ──
     if call.data == "tal_explorar":
         mostrar_menu_explorar(bot, call, edit=True)
         return
@@ -417,7 +422,8 @@ def callback_global(call):
         anio = call.data.replace("anio_", "")
         bot.edit_message_text(
             f"📚 *Asignaturas {anio}:*\n" + "\n".join(DATA_PLAN[anio]),
-            call.message.chat.id, call.message.message_id, parse_mode="Markdown"
+            call.message.chat.id, call.message.message_id,
+            parse_mode="Markdown"
         )
 
     elif call.data.startswith("hor_"):
