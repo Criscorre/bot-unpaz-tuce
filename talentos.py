@@ -2,6 +2,9 @@
 import requests
 import time
 import re
+import csv
+import io
+import unicodedata
 from telebot import types
 
 # --- GOOGLE FORM TALENTOS ---
@@ -16,17 +19,15 @@ FIELD_WEB         = "entry.1049166554"
 FIELD_FOTO_ID     = "entry.452793589"
 
 # --- GOOGLE FORM VOTOS ---
-FORM_VOTOS_URL       = "https://docs.google.com/forms/d/e/1FAIpQLSdlSuIG5gTDvcp71jFLKUo8BfZlcu_uZ5bBX62yEn1_B7f-ww/formResponse"
-FIELD_VOTER_ID       = "entry.1171672904"
-FIELD_TALENTO_ID     = "entry.1795842410"
-FIELD_ESTRELLAS      = "entry.399597954"
-FIELD_FECHA_VOTO     = "entry.1646839553"
+FORM_VOTOS_URL   = "https://docs.google.com/forms/d/e/1FAIpQLSdlSuIG5gTDvcp71jFLKUo8BfZlcu_uZ5bBX62yEn1_B7f-ww/formResponse"
+FIELD_VOTER_ID   = "entry.1171672904"
+FIELD_TALENTO_ID = "entry.1795842410"
+FIELD_ESTRELLAS  = "entry.399597954"
+FIELD_FECHA_VOTO = "entry.1646839553"
 
-# --- SHEETS ---
-SHEET_TALENTOS_ID  = "1EDHX8juohDWDP0NaISaKUhmurL4ZqfwbAItVSD4Mn3E"
-SHEET_VOTOS_ID     = "1HGCPojrHSygQPt9wL67rWwNSkU3OLlFHWpmIygZ2I98"
-SHEET_CSV_URL      = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT8DocuqEQ1B64cPxj7QdvRhwGm33xTSiQ5jbvV573ZMw65knP6zR_fWcIUYjjFbpEooFxhh1KDdAIA/pub?gid=223881563&single=true&output=csv"
-SHEET_VOTOS_URL    = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQmRdcceKVNXJTZYfPsKKU4S7tje_6E52PjZY6pxAaov0LMC2AukxKBvmVW2b_q0lLuaW9D_X3Gqt9i/pub?gid=912500209&single=true&output=csv"
+# --- SHEETS CSV PÚBLICAS ---
+SHEET_CSV_URL   = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT8DocuqEQ1B64cPxj7QdvRhwGm33xTSiQ5jbvV573ZMw65knP6zR_fWcIUYjjFbpEooFxhh1KDdAIA/pub?gid=223881563&single=true&output=csv"
+SHEET_VOTOS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQmRdcceKVNXJTZYfPsKKU4S7tje_6E52PjZY6pxAaov0LMC2AukxKBvmVW2b_q0lLuaW9D_X3Gqt9i/pub?gid=912500209&single=true&output=csv"
 
 # --- CATEGORÍAS ---
 CATEGORIAS = [
@@ -49,13 +50,21 @@ PASOS_PREGUNTAS = {
 }
 
 estados_talentos = {}
-# Cache en memoria para evitar doble voto en la misma sesión
 votos_cache = {}
 
 
 # ─────────────────────────────────────────────
-#  HELPERS — LINKS
+#  HELPERS
 # ─────────────────────────────────────────────
+
+def normalizar_categoria(texto: str) -> str:
+    """Elimina emojis para comparación robusta entre bot y Sheet."""
+    resultado = ""
+    for char in texto:
+        cat = unicodedata.category(char)
+        if not cat.startswith("So") and not cat.startswith("Sm"):
+            resultado += char
+    return resultado.strip()
 
 def normalizar_link(texto: str) -> str:
     if not texto or texto.lower() in ["no tengo", "sin web", ""]:
@@ -82,27 +91,26 @@ def formatear_web(texto: str) -> str:
     url = normalizar_link(texto)
     if not url:
         return None
-    if "instagram.com" in url:  return f"[📸 Instagram]({url})"
-    if "linkedin.com"  in url:  return f"[💼 LinkedIn]({url})"
-    if "behance.net"   in url:  return f"[🎨 Behance]({url})"
-    if "github.com"    in url:  return f"[💻 GitHub]({url})"
+    if "instagram.com" in url: return f"[📸 Instagram]({url})"
+    if "linkedin.com"  in url: return f"[💼 LinkedIn]({url})"
+    if "behance.net"   in url: return f"[🎨 Behance]({url})"
+    if "github.com"    in url: return f"[💻 GitHub]({url})"
     return f"[🌐 Web/Portfolio]({url})"
 
 
 # ─────────────────────────────────────────────
-#  HELPERS — SHEET
+#  SHEET — LEER
 # ─────────────────────────────────────────────
 
 def leer_talentos_desde_sheet() -> list:
     try:
-        import csv, io
         r = requests.get(SHEET_CSV_URL, timeout=5)
         if r.status_code != 200:
             return []
-        reader = csv.reader(io.StringIO(r.text))
-        filas  = list(reader)
+        reader  = csv.reader(io.StringIO(r.text))
+        filas   = list(reader)
         talentos = []
-        for i, cols in enumerate(filas[1:]):  # saltar encabezado
+        for i, cols in enumerate(filas[1:]):
             if len(cols) >= 8:
                 talentos.append({
                     "idx":         i,
@@ -123,7 +131,6 @@ def leer_talentos_desde_sheet() -> list:
 
 def leer_votos() -> list:
     try:
-        import csv, io
         r = requests.get(SHEET_VOTOS_URL, timeout=5)
         if r.status_code != 200:
             return []
@@ -375,7 +382,6 @@ def enviar_tarjeta_talento(bot, chat_id, talento: dict, viewer_id: int, votos: l
 
     markup = types.InlineKeyboardMarkup(row_width=5)
 
-    # Botones de votación
     ya = ya_voto(str(viewer_id), str(idx), votos)
     if not ya:
         markup.add(
@@ -388,12 +394,10 @@ def enviar_tarjeta_talento(bot, chat_id, talento: dict, viewer_id: int, votos: l
     else:
         markup.add(types.InlineKeyboardButton("✅ Ya votaste este perfil", callback_data="tal_noop"))
 
-    # Contactar
     if username and username not in ["Sin usuario", "no tengo"]:
         tg = username.replace("@", "")
         markup.add(types.InlineKeyboardButton(f"💬 Contactar a {nombre}", url=f"https://t.me/{tg}"))
 
-    # Editar / Eliminar solo para el dueño
     if str(viewer_id) == str(tid):
         markup.add(
             types.InlineKeyboardButton("✏️ Editar perfil",   callback_data=f"tal_editar_{idx}"),
@@ -402,7 +406,6 @@ def enviar_tarjeta_talento(bot, chat_id, talento: dict, viewer_id: int, votos: l
 
     markup.add(types.InlineKeyboardButton("⬅️ Volver", callback_data=f"tal_ver_{cat}"))
 
-    # Enviar foto si tiene
     if foto_id and foto_id not in ["sin_foto", ""]:
         try:
             bot.send_photo(chat_id, foto_id, caption=texto,
@@ -435,7 +438,7 @@ def mostrar_talentos_por_categoria(bot, call, categoria):
     bot.answer_callback_query(call.id, "Buscando talentos...")
     talentos  = leer_talentos_desde_sheet()
     votos     = leer_votos()
-    filtrados = [t for t in talentos if t["categoria"] == categoria]
+    filtrados = [t for t in talentos if normalizar_categoria(t["categoria"]) == normalizar_categoria(categoria)]
 
     if not filtrados:
         markup = types.InlineKeyboardMarkup()
@@ -529,7 +532,6 @@ def registrar_voto(bot, call, idx: int, estrellas: int):
         bot.answer_callback_query(call.id, "Ya votaste este perfil.", show_alert=True)
         return
 
-    # Guardar en cache local y en Google Form (persistente)
     key = f"{voter_id}:{idx}"
     votos_cache[key] = estrellas
     exito = enviar_voto_a_form(str(voter_id), str(idx), estrellas)
@@ -539,7 +541,6 @@ def registrar_voto(bot, call, idx: int, estrellas: int):
     else:
         bot.answer_callback_query(call.id, f"Voto registrado: {estrellas}⭐", show_alert=True)
 
-    # Refrescar tarjeta
     talentos = leer_talentos_desde_sheet()
     votos    = leer_votos()
     talento  = next((t for t in talentos if t["idx"] == idx), None)
