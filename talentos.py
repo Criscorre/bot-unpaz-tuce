@@ -95,25 +95,26 @@ def formatear_web(texto: str) -> str:
 
 def leer_talentos_desde_sheet() -> list:
     try:
+        import csv, io
         r = requests.get(SHEET_CSV_URL, timeout=5)
         if r.status_code != 200:
             return []
-        lineas = r.text.strip().split("\n")
+        reader = csv.reader(io.StringIO(r.text))
+        filas  = list(reader)
         talentos = []
-        for i, linea in enumerate(lineas[1:]):
-            cols = [c.strip().strip('"') for c in linea.split(",")]
+        for i, cols in enumerate(filas[1:]):  # saltar encabezado
             if len(cols) >= 8:
                 talentos.append({
                     "idx":         i,
-                    "timestamp":   cols[0],
-                    "telegram_id": cols[1],
-                    "nombre":      cols[2],
-                    "username":    cols[3],
-                    "categoria":   cols[4],
-                    "anio":        cols[5],
-                    "bio":         cols[6],
-                    "web":         cols[7],
-                    "foto_id":     cols[8] if len(cols) > 8 else "",
+                    "timestamp":   cols[0].strip(),
+                    "telegram_id": cols[1].strip(),
+                    "nombre":      cols[2].strip(),
+                    "username":    cols[3].strip(),
+                    "categoria":   cols[4].strip(),
+                    "anio":        cols[5].strip(),
+                    "bio":         cols[6].strip(),
+                    "web":         cols[7].strip(),
+                    "foto_id":     cols[8].strip() if len(cols) > 8 else "",
                 })
         return talentos
     except Exception as e:
@@ -122,19 +123,20 @@ def leer_talentos_desde_sheet() -> list:
 
 def leer_votos() -> list:
     try:
+        import csv, io
         r = requests.get(SHEET_VOTOS_URL, timeout=5)
         if r.status_code != 200:
             return []
-        lineas = r.text.strip().split("\n")
-        votos = []
-        for linea in lineas[1:]:
-            cols = [c.strip().strip('"') for c in linea.split(",")]
+        reader = csv.reader(io.StringIO(r.text))
+        filas  = list(reader)
+        votos  = []
+        for cols in filas[1:]:
             if len(cols) >= 4:
                 votos.append({
-                    "voter_id":   cols[1],
-                    "talento_id": cols[2],
-                    "estrellas":  cols[3],
-                    "fecha":      cols[4] if len(cols) > 4 else "",
+                    "voter_id":   cols[1].strip(),
+                    "talento_id": cols[2].strip(),
+                    "estrellas":  cols[3].strip(),
+                    "fecha":      cols[4].strip() if len(cols) > 4 else "",
                 })
         return votos
     except Exception as e:
