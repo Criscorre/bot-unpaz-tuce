@@ -1,13 +1,10 @@
 # talentos.py
-# Módulo completo de Talentos TUCE
-# Usa Google Forms como intermediario para guardar en Google Sheets
-
 import requests
 import time
 from telebot import types
 
 # --- IDs DE LOS CAMPOS DEL GOOGLE FORM ---
-FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfpVGoa51jkmsp8OZ2tOAuZAJ8Z1f9HUXp60ZjvBLI8MVum_w/formResponse"
+FORM_URL          = "https://docs.google.com/forms/d/e/1FAIpQLSfpVGoa51jkmsp8OZ2tOAuZAJ8Z1f9HUXp60ZjvBLI8MVum_w/formResponse"
 FIELD_TELEGRAM_ID = "entry.80058858"
 FIELD_NOMBRE      = "entry.1297120149"
 FIELD_USERNAME    = "entry.1956463938"
@@ -17,10 +14,8 @@ FIELD_BIO         = "entry.852614958"
 FIELD_WEB         = "entry.1049166554"
 FIELD_FOTO_ID     = "entry.452793589"
 
-# --- URL PÚBLICA DE LA SHEET (modo lectura) ---
-# Reemplazá SHEET_ID por el ID real de tu Google Sheet una vez que el form esté conectado
-# Lo encontrás en la URL: docs.google.com/spreadsheets/d/SHEET_ID/edit
-SHEET_ID = "1EDHX8juohDWDP0NaISaKUhmurL4ZqfwbAItVSD4Mn3E"
+# --- SHEET ID para lectura pública ---
+SHEET_ID      = "1EDHX8juohDWDP0NaISaKUhmurL4ZqfwbAItVSD4Mn3E"
 SHEET_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Sheet1"
 
 # --- CATEGORÍAS ---
@@ -35,22 +30,36 @@ CATEGORIAS = [
     "🏢 Agencias TUCE",
 ]
 
-# --- ESTADO CONVERSACIONAL POR USUARIO ---
-# Guarda el paso actual y los datos temporales de cada usuario
-# { user_id: { "paso": "categoria"|"bio"|"anio"|"web"|"foto", "datos": {...} } }
+# --- PASOS EN ORDEN FIJO ---
+# categoria → foto → nombre → username → anio → bio → web → guardar
+PASOS_ORDEN = ["categoria", "foto", "nombre", "username", "anio", "bio", "web"]
+
+PASOS_PREGUNTAS = {
+    "foto":     "📸 *Paso 2/7 — Foto de perfil*\nMandame una foto o escribí `omitir`",
+    "nombre":   "👤 *Paso 3/7 — Nombre completo*\n¿Cómo te llamás?",
+    "username": "💬 *Paso 4/7 — Usuario de Telegram*\n¿Cuál es tu @usuario de Telegram?\n_(Si no tenés, escribí_ `no tengo`_)_",
+    "bio":      "📝 *Paso 6/7 — Presentación*\nEscribí una breve bio:\n\n_Ejemplo: \"Especializado en Meta Ads, trabajo con marcas locales.\"_\n_(Máx. 200 caracteres)_",
+    "web":      "🌐 *Paso 7/7 — Web o Portfolio*\n¿Tenés web, portfolio o Instagram profesional?\n_(Pegá el link o escribí_ `no tengo`_)_",
+}
+
+# Estado por usuario: { user_id: { "paso": str, "datos": dict } }
 estados_talentos = {}
 
+
+# ─────────────────────────────────────────────
+#  HELPERS
+# ─────────────────────────────────────────────
+
 def enviar_a_form(datos: dict) -> bool:
-    """Envía los datos del talento al Google Form."""
     payload = {
         FIELD_TELEGRAM_ID: str(datos.get("telegram_id", "")),
-        FIELD_NOMBRE:       datos.get("nombre", ""),
-        FIELD_USERNAME:     datos.get("username", "Sin usuario"),
-        FIELD_CATEGORIA:    datos.get("categoria", ""),
-        FIELD_ANIO:         datos.get("anio", ""),
-        FIELD_BIO:          datos.get("bio", ""),
-        FIELD_WEB:          datos.get("web", "Sin web"),
-        FIELD_FOTO_ID:      datos.get("foto_id", "sin_foto"),
+        FIELD_NOMBRE:      datos.get("nombre", ""),
+        FIELD_USERNAME:    datos.get("username", "Sin usuario"),
+        FIELD_CATEGORIA:   datos.get("categoria", ""),
+        FIELD_ANIO:        datos.get("anio", ""),
+        FIELD_BIO:         datos.get("bio", ""),
+        FIELD_WEB:         datos.get("web", "Sin web"),
+        FIELD_FOTO_ID:     datos.get("foto_id", "sin_foto"),
     }
     try:
         r = requests.post(FORM_URL, data=payload, timeout=10)
@@ -60,14 +69,13 @@ def enviar_a_form(datos: dict) -> bool:
         return False
 
 def leer_talentos_desde_sheet() -> list:
-    """Lee los talentos publicados desde la Google Sheet pública (CSV)."""
     try:
-        r = requests.get(SHEET_CSV_URL, timeout=10)
+        r = requests.get(SHEET_CSV_URL, timeout=5)
         if r.status_code != 200:
             return []
         lineas = r.text.strip().split("\n")
         talentos = []
-        for linea in lineas[1:]:  # saltar encabezado
+        for linea in lineas[1:]:
             cols = [c.strip().strip('"') for c in linea.split(",")]
             if len(cols) >= 8:
                 talentos.append({
@@ -86,19 +94,52 @@ def leer_talentos_desde_sheet() -> list:
         print(f"❌ Error leyendo Sheet: {e}")
         return []
 
+def pedir_anio(bot, chat_id):
+    """Manda el botón de selección de año."""
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("1° año",     callback_data="tal_anio_1° año"),
+        types.InlineKeyboardButton("2° año",     callback_data="tal_anio_2° año"),
+        types.InlineKeyboardButton("3° año",     callback_data="tal_anio_3° año"),
+        types.InlineKeyboardButton("Recibida/o", callback_data="tal_anio_Recibida/o"),
+    )
+    bot.send_message(
+        chat_id,
+        "📅 *Paso 5/7 — Año de carrera*\n¿Qué año cursás?",
+        reply_markup=markup,
+        parse_mode="Markdown"
+    )
+
+
 # ─────────────────────────────────────────────
-#  FLUJO DE REGISTRO — paso a paso
+#  MENÚ PRINCIPAL TALENTOS
+# ─────────────────────────────────────────────
+
+def menu_talentos(bot, message):
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        types.InlineKeyboardButton("➕ Publicar mi perfil", callback_data="tal_registrar"),
+        types.InlineKeyboardButton("🔍 Explorar talentos",  callback_data="tal_explorar"),
+    )
+    bot.send_message(
+        message.chat.id,
+        "🌟 *Talentos TUCE*\n\nConectá con compañeros según su especialidad.\n¿Qué querés hacer?",
+        reply_markup=markup,
+        parse_mode="Markdown"
+    )
+
+
+# ─────────────────────────────────────────────
+#  FLUJO DE REGISTRO — paso a paso ordenado
 # ─────────────────────────────────────────────
 
 def iniciar_registro(bot, message):
-    """Paso 0: El alumno quiere publicar su perfil."""
+    """Paso 0 → muestra categorías."""
     user_id = message.from_user.id
     estados_talentos[user_id] = {
         "paso": "categoria",
         "datos": {
             "telegram_id": user_id,
-            "nombre":   message.from_user.first_name or "",
-            "username": f"@{message.from_user.username}" if message.from_user.username else "Sin usuario",
         }
     }
     markup = types.InlineKeyboardMarkup(row_width=2)
@@ -106,190 +147,186 @@ def iniciar_registro(bot, message):
         markup.add(types.InlineKeyboardButton(cat, callback_data=f"tal_cat_{cat}"))
     bot.send_message(
         message.chat.id,
-        "🏷️ *¿Cuál es tu área principal?*\nElegí tu rol:",
+        "🏷️ *Paso 1/7 — Categoría*\n¿Cuál es tu área principal?",
         reply_markup=markup,
         parse_mode="Markdown"
     )
 
 def paso_categoria(bot, call, categoria):
-    """Paso 1: Guardó categoría, pide foto."""
+    """Guardó categoría → pide foto."""
     user_id = call.from_user.id
     if user_id not in estados_talentos:
-        bot.answer_callback_query(call.id, "Sesión expirada, empezá de nuevo.")
+        bot.answer_callback_query(call.id)
+        iniciar_registro(bot, call.message)
         return
     estados_talentos[user_id]["datos"]["categoria"] = categoria
     estados_talentos[user_id]["paso"] = "foto"
     bot.edit_message_text(
-        f"✅ Categoría: *{categoria}*\n\n📸 Ahora mandame una *foto de perfil*.\n"
-        "_(Si no querés foto, escribí_ `omitir`_)_",
+        f"✅ Categoría: *{categoria}*",
+        call.message.chat.id, call.message.message_id,
+        parse_mode="Markdown"
+    )
+    bot.send_message(
         call.message.chat.id,
-        call.message.message_id,
+        PASOS_PREGUNTAS["foto"],
         parse_mode="Markdown"
     )
 
-def paso_foto(bot, message):
-    """Paso 2: Recibe foto o 'omitir', pide bio."""
+def paso_anio(bot, call, anio):
+    """Guardó año → pide bio."""
+    user_id = call.from_user.id
+    if user_id not in estados_talentos:
+        return
+    estados_talentos[user_id]["datos"]["anio"] = anio
+    estados_talentos[user_id]["paso"] = "bio"
+    bot.edit_message_text(
+        f"✅ Año: *{anio}*",
+        call.message.chat.id, call.message.message_id,
+        parse_mode="Markdown"
+    )
+    bot.send_message(
+        call.message.chat.id,
+        PASOS_PREGUNTAS["bio"],
+        parse_mode="Markdown"
+    )
+
+def paso_foto(bot, message) -> bool:
+    """Recibe foto u 'omitir' → pide nombre."""
     user_id = message.from_user.id
     if user_id not in estados_talentos or estados_talentos[user_id]["paso"] != "foto":
         return False
-
     if message.photo:
-        foto_id = message.photo[-1].file_id
-        estados_talentos[user_id]["datos"]["foto_id"] = foto_id
+        estados_talentos[user_id]["datos"]["foto_id"] = message.photo[-1].file_id
     else:
         estados_talentos[user_id]["datos"]["foto_id"] = "sin_foto"
-
-    estados_talentos[user_id]["paso"] = "bio"
-    bot.send_message(
-        message.chat.id,
-        "✍️ Escribí tu *presentación breve*:\n\n"
-        "_Ejemplo: \"Soy Lara, 2° año TUCE. Especializada en Meta Ads e Instagram. "
-        "Trabajo con marcas locales.\"_\n\n"
-        "_(Máx. 200 caracteres)_",
-        parse_mode="Markdown"
-    )
+    estados_talentos[user_id]["paso"] = "nombre"
+    bot.send_message(message.chat.id, PASOS_PREGUNTAS["nombre"], parse_mode="Markdown")
     return True
 
-def paso_bio(bot, message):
-    """Paso 3: Recibe bio, pide año."""
+def paso_nombre(bot, message) -> bool:
+    """Recibe nombre → pide username."""
+    user_id = message.from_user.id
+    if user_id not in estados_talentos or estados_talentos[user_id]["paso"] != "nombre":
+        return False
+    estados_talentos[user_id]["datos"]["nombre"] = message.text.strip()[:80]
+    estados_talentos[user_id]["paso"] = "username"
+    bot.send_message(message.chat.id, PASOS_PREGUNTAS["username"], parse_mode="Markdown")
+    return True
+
+def paso_username(bot, message) -> bool:
+    """Recibe username → pide año."""
+    user_id = message.from_user.id
+    if user_id not in estados_talentos or estados_talentos[user_id]["paso"] != "username":
+        return False
+    username = message.text.strip()
+    if username.lower() == "no tengo":
+        username = f"@{message.from_user.username}" if message.from_user.username else "Sin usuario"
+    elif not username.startswith("@"):
+        username = f"@{username}"
+    estados_talentos[user_id]["datos"]["username"] = username
+    estados_talentos[user_id]["paso"] = "anio"
+    pedir_anio(bot, message.chat.id)
+    return True
+
+def paso_bio(bot, message) -> bool:
+    """Recibe bio → pide web."""
     user_id = message.from_user.id
     if user_id not in estados_talentos or estados_talentos[user_id]["paso"] != "bio":
         return False
-
-    bio = message.text[:200]
-    estados_talentos[user_id]["datos"]["bio"] = bio
-    estados_talentos[user_id]["paso"] = "anio"
-
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("1° año",    callback_data="tal_anio_1° año"),
-        types.InlineKeyboardButton("2° año",    callback_data="tal_anio_2° año"),
-        types.InlineKeyboardButton("3° año",    callback_data="tal_anio_3° año"),
-        types.InlineKeyboardButton("Recibida/o", callback_data="tal_anio_Recibida/o"),
-    )
-    bot.send_message(
-        message.chat.id,
-        "📅 *¿Qué año de la carrera cursás?*",
-        reply_markup=markup,
-        parse_mode="Markdown"
-    )
+    estados_talentos[user_id]["datos"]["bio"] = message.text.strip()[:200]
+    estados_talentos[user_id]["paso"] = "web"
+    bot.send_message(message.chat.id, PASOS_PREGUNTAS["web"], parse_mode="Markdown")
     return True
 
-def paso_anio(bot, call, anio):
-    """Paso 4: Guardó año, pide web."""
-    user_id = call.from_user.id
-    if user_id not in estados_talentos:
-        bot.answer_callback_query(call.id, "Sesión expirada, empezá de nuevo.")
-        return
-    estados_talentos[user_id]["datos"]["anio"] = anio
-    estados_talentos[user_id]["paso"] = "web"
-    bot.edit_message_text(
-        f"✅ Año: *{anio}*\n\n🌐 *¿Tenés web, portfolio o Instagram profesional?*\n"
-        "_(Pegá el link o escribí_ `no tengo`_)_",
-        call.message.chat.id,
-        call.message.message_id,
-        parse_mode="Markdown"
-    )
-
-def paso_web(bot, message):
-    """Paso 5: Recibe web, guarda todo y confirma."""
+def paso_web(bot, message) -> bool:
+    """Recibe web → guarda todo y confirma."""
     user_id = message.from_user.id
     if user_id not in estados_talentos or estados_talentos[user_id]["paso"] != "web":
         return False
 
-    web = message.text.strip()
-    estados_talentos[user_id]["datos"]["web"] = web
+    estados_talentos[user_id]["datos"]["web"] = message.text.strip()
     datos = estados_talentos[user_id]["datos"]
 
+    # Resumen antes de guardar
+    cat  = datos.get("categoria", "")
+    nom  = datos.get("nombre", "")
+    usr  = datos.get("username", "")
+    anio = datos.get("anio", "")
+    bio  = datos.get("bio", "")
+    web  = datos.get("web", "")
+
     bot.send_chat_action(message.chat.id, "typing")
-
     exito = enviar_a_form(datos)
-
-    del estados_talentos[user_id]  # limpiar estado
+    del estados_talentos[user_id]
 
     if exito:
-        cat = datos.get("categoria", "")
-        nombre = datos.get("nombre", "")
         bot.send_message(
             message.chat.id,
-            f"🎉 *¡Perfil publicado exitosamente!*\n\n"
-            f"Ya aparecés en *Talentos TUCE* como *{cat}*.\n\n"
-            f"Tus compañeros van a poder encontrarte y contactarte directamente.\n\n"
-            f"_¿Querés ver otros talentos? Volvé al menú y tocá 🌟 Talentos TUCE._",
+            f"🎉 *¡Perfil publicado!*\n\n"
+            f"*Categoría:* {cat}\n"
+            f"*Nombre:* {nom}\n"
+            f"*Usuario:* {usr}\n"
+            f"*Año:* {anio}\n"
+            f"*Bio:* {bio}\n"
+            f"*Web:* {web}\n\n"
+            f"Tus compañeros ya pueden encontrarte en 🌟 Talentos TUCE.",
             parse_mode="Markdown"
         )
     else:
         bot.send_message(
             message.chat.id,
-            "⚠️ Hubo un problema al guardar tu perfil. Por favor intentá de nuevo en unos minutos."
+            "⚠️ Hubo un problema al guardar tu perfil. Intentá de nuevo en unos minutos."
         )
     return True
 
+
 # ─────────────────────────────────────────────
-#  FLUJO DE EXPLORACIÓN — ver talentos
+#  FLUJO DE EXPLORACIÓN
 # ─────────────────────────────────────────────
 
-def mostrar_menu_explorar(bot, message_or_call, edit=False):
-    """Muestra las categorías para explorar."""
+def mostrar_menu_explorar(bot, call, edit=False):
     markup = types.InlineKeyboardMarkup(row_width=2)
     for cat in CATEGORIAS:
         markup.add(types.InlineKeyboardButton(cat, callback_data=f"tal_ver_{cat}"))
-
     texto = "🔍 *¿Qué perfil buscás?*\nElegí una categoría:"
-
     if edit:
         bot.edit_message_text(
-            texto,
-            message_or_call.message.chat.id,
-            message_or_call.message.message_id,
-            reply_markup=markup,
-            parse_mode="Markdown"
+            texto, call.message.chat.id, call.message.message_id,
+            reply_markup=markup, parse_mode="Markdown"
         )
     else:
-        bot.send_message(
-            message_or_call.chat.id,
-            texto,
-            reply_markup=markup,
-            parse_mode="Markdown"
-        )
+        bot.send_message(call.message.chat.id, texto, reply_markup=markup, parse_mode="Markdown")
 
 def mostrar_talentos_por_categoria(bot, call, categoria):
-    """Muestra los talentos de una categoría leídos desde la Sheet."""
     bot.answer_callback_query(call.id, "Buscando talentos...")
-
-    talentos = leer_talentos_desde_sheet()
+    talentos  = leer_talentos_desde_sheet()
     filtrados = [t for t in talentos if t["categoria"] == categoria]
 
+    markup = types.InlineKeyboardMarkup(row_width=1)
+
     if not filtrados:
-        markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("⬅️ Ver otras categorías", callback_data="tal_explorar"))
         bot.edit_message_text(
-            f"😕 Todavía no hay talentos registrados en *{categoria}*.\n\n"
-            "¡Podés ser el primero en publicar tu perfil!",
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=markup,
-            parse_mode="Markdown"
+            f"😕 Todavía no hay talentos en *{categoria}*.\n¡Podés ser el primero!",
+            call.message.chat.id, call.message.message_id,
+            reply_markup=markup, parse_mode="Markdown"
         )
         return
 
     texto = f"*{categoria}* — {len(filtrados)} talento(s)\n\n"
-    markup = types.InlineKeyboardMarkup(row_width=1)
-
-    for t in filtrados[:10]:  # máximo 10 por categoría
+    for t in filtrados[:10]:
         nombre   = t.get("nombre", "Sin nombre")
         anio     = t.get("anio", "")
         bio      = t.get("bio", "")[:80]
         web      = t.get("web", "")
         username = t.get("username", "")
 
-        texto += f"👤 *{nombre}* · {anio}\n"
-        texto += f"_{bio}..._\n"
-        if web and web.lower() != "no tengo" and web.lower() != "sin web":
+        texto += f"👤 *{nombre}* · {anio}\n_{bio}_\n"
+        if web and web.lower() not in ["no tengo", "sin web"]:
             texto += f"🌐 {web}\n"
         texto += "\n"
 
-        if username and username != "Sin usuario":
+        if username and username not in ["Sin usuario", "no tengo"]:
             tg = username.replace("@", "")
             markup.add(types.InlineKeyboardButton(
                 f"💬 Contactar a {nombre}",
@@ -297,32 +334,8 @@ def mostrar_talentos_por_categoria(bot, call, categoria):
             ))
 
     markup.add(types.InlineKeyboardButton("⬅️ Ver otras categorías", callback_data="tal_explorar"))
-
     bot.edit_message_text(
-        texto,
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=markup,
-        parse_mode="Markdown",
+        texto, call.message.chat.id, call.message.message_id,
+        reply_markup=markup, parse_mode="Markdown",
         disable_web_page_preview=True
-    )
-
-# ─────────────────────────────────────────────
-#  MENÚ PRINCIPAL DE TALENTOS
-# ─────────────────────────────────────────────
-
-def menu_talentos(bot, message):
-    """Menú de entrada a la sección Talentos TUCE."""
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    markup.add(
-        types.InlineKeyboardButton("➕ Publicar mi perfil",    callback_data="tal_registrar"),
-        types.InlineKeyboardButton("🔍 Explorar talentos",     callback_data="tal_explorar"),
-    )
-    bot.send_message(
-        message.chat.id,
-        "🌟 *Talentos TUCE*\n\n"
-        "Conectá con compañeros de la carrera según su especialidad.\n"
-        "¿Qué querés hacer?",
-        reply_markup=markup,
-        parse_mode="Markdown"
     )

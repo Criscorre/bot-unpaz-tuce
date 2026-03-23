@@ -14,6 +14,8 @@ from talentos import (
     mostrar_talentos_por_categoria,
     paso_categoria,
     paso_foto,
+    paso_nombre,
+    paso_username,
     paso_bio,
     paso_anio,
     paso_web,
@@ -221,6 +223,10 @@ def manejar_mensajes(message):
         paso = estados_talentos[user_id]["paso"]
         if paso == "foto" and paso_foto(bot, message):
             return
+        elif paso == "nombre" and paso_nombre(bot, message):
+            return
+        elif paso == "username" and paso_username(bot, message):
+            return
         elif paso == "bio" and paso_bio(bot, message):
             return
         elif paso == "web" and paso_web(bot, message):
@@ -276,8 +282,43 @@ def manejar_mensajes(message):
         menu_talentos(bot, message)
 
     else:
-        bot.send_chat_action(message.chat.id, 'typing')
-        bot.reply_to(message, responder_ia(message.text))
+        texto = message.text.lower().strip()
+        RESPUESTAS_FIJAS = {
+            "hola": "👋 ¡Hola! Usá el menú para navegar las opciones.",
+            "buenas": "👋 ¡Buenas! Usá el menú para navegar las opciones.",
+            "buen dia": "👋 ¡Buen día! Usá el menú para navegar las opciones.",
+            "buenos dias": "👋 ¡Buenos días! Usá el menú para navegar las opciones.",
+            "buenas tardes": "👋 ¡Buenas tardes! Usá el menú para navegar las opciones.",
+            "buenas noches": "👋 ¡Buenas noches! Usá el menú para navegar las opciones.",
+            "gracias": "🙌 ¡De nada! Si necesitás algo más, usá el menú.",
+            "ok": "👍 ¡Perfecto! Si necesitás algo más, usá el menú.",
+            "campus": "🎓 Campus Virtual: https://campusvirtual.unpaz.edu.ar/",
+            "siu": "🖥️ SIU Guaraní: https://estudiantes.unpaz.edu.ar/autogestion/",
+            "guarani": "🖥️ SIU Guaraní: https://estudiantes.unpaz.edu.ar/autogestion/",
+            "instagram": "📸 Instagram TUCE: @tuce_unpaz",
+            "youtube": "▶️ YouTube TUCE: @TUCEUNPAZ",
+            "discord": "🎮 Discord Laboral: https://discord.com/invite/Sa28wwk8b3",
+            "whatsapp": "💬 Grupo WhatsApp: https://chat.whatsapp.com/JElcFd4U08QBKsL1J1YM8u",
+            "web": "🌐 UNPAZ: https://unpaz.edu.ar/comercioelectronico",
+            "pagina": "🌐 UNPAZ: https://unpaz.edu.ar/comercioelectronico",
+            "contacto": "📩 consultasestudiantes@unpaz.edu.ar",
+            "mail": "📩 consultasestudiantes@unpaz.edu.ar",
+            "email": "📩 consultasestudiantes@unpaz.edu.ar",
+            "beca": "🎓 Becas: https://unpaz.edu.ar/bienestar/becas",
+            "becas": "🎓 Becas: https://unpaz.edu.ar/bienestar/becas",
+            "pasantia": "💼 Pasantías: https://unpaz.edu.ar/pasantias",
+            "pasantias": "💼 Pasantías: https://unpaz.edu.ar/pasantias",
+            "equivalencia": "⚖️ Equivalencias 01/04 al 10/04/2026: https://unpaz.edu.ar/formularioequivalencias",
+            "equivalencias": "⚖️ Equivalencias 01/04 al 10/04/2026: https://unpaz.edu.ar/formularioequivalencias",
+            "boleto": "🚌 Boleto estudiantil: gestionalo vía SIU Guaraní si sos alumno regular.",
+            "certificado": "📄 Certificados: emisión digital vía SIU Guaraní.",
+            "certificados": "📄 Certificados: emisión digital vía SIU Guaraní.",
+        }
+        if texto in RESPUESTAS_FIJAS:
+            bot.reply_to(message, RESPUESTAS_FIJAS[texto])
+        else:
+            bot.send_chat_action(message.chat.id, 'typing')
+            bot.reply_to(message, responder_ia(message.text))
 
 
 @bot.callback_query_handler(func=lambda call: True)
