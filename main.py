@@ -75,9 +75,9 @@ DATA_PLAN = {
 }
 DATA_BOT_INFO = {
     "bot_equivalencias": "⚖️ *Equivalencias:* Trámite formal del 01/04 al 10/04/2026.",
-    "bot_boleto":        "🚌 *Boleto Estudiantil:* Gestión vía SIU Guaraní para alumnos regulares.",
+    "bot_boleto":         "🚌 *Boleto Estudiantil:* Gestión vía SIU Guaraní para alumnos regulares.",
     "bot_certificados":  "📄 *Certificaciones:* Emisión digital de certificados vía SIU Guaraní.",
-    "bot_inscripcion":   "✍️ *Inscripción:* Únicamente por SIU Guaraní en fechas publicadas."
+    "bot_inscripcion":    "✍️ *Inscripción:* Únicamente por SIU Guaraní en fechas publicadas."
 }
 URLS_UNPAZ = {
     "tuce":         "https://unpaz.edu.ar/comercioelectronico",
@@ -92,7 +92,7 @@ URLS_UNPAZ = {
 def obtener_info_web(url):
     try:
         import re
-        r = requests.get(url, timeout=3, headers={"User-Agent": "Mozilla/5.0"})
+        r = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
         if r.status_code != 200:
             return ""
         t = r.text
@@ -105,7 +105,7 @@ def obtener_info_web(url):
 
 def detectar_url_relevante(p):
     p = p.lower()
-    if any(w in p for w in ["beca","becas"]):               return URLS_UNPAZ["becas"]
+    if any(w in p for w in ["beca","becas"]):                return URLS_UNPAZ["becas"]
     if any(w in p for w in ["pasantía","pasantias"]):        return URLS_UNPAZ["pasantias"]
     if any(w in p for w in ["equivalencia","equivalencias"]): return URLS_UNPAZ["equivalencias"]
     if any(w in p for w in ["calendario","fechas","cuándo"]): return URLS_UNPAZ["calendario"]
@@ -125,7 +125,7 @@ def registrar_usuario(user):
         print(f"Error registro local: {e}")
     if FORM_USUARIOS_URL and FORM_USUARIOS_ID:
         try:
-            requests.post(FORM_USUARIOS_URL, timeout=3, data={
+            requests.post(FORM_USUARIOS_URL, timeout=5, headers={"User-Agent": "Mozilla/5.0"}, data={
                 FORM_USUARIOS_ID:       str(user.id),
                 FORM_USUARIOS_NOMBRE:   user.first_name or "",
                 FORM_USUARIOS_USERNAME: f"@{user.username}" if user.username else "Sin usuario",
@@ -162,7 +162,7 @@ def responder_ia(pregunta):
         return r.choices[0].message.content
     except Exception as e:
         print(f"Error IA: {e}")
-        return "Servicio no disponible. Consultá en unpaz.edu.ar"
+        return "Servicio no disponible temporalmente. Por favor, consultá en unpaz.edu.ar"
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -231,7 +231,7 @@ def manejar_mensajes(message):
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
             types.InlineKeyboardButton("🎓 Campus Virtual",            url="https://campusvirtual.unpaz.edu.ar/"),
-            types.InlineKeyboardButton("🖥️ SIU Guaraní",              url="https://estudiantes.unpaz.edu.ar/autogestion/"),
+            types.InlineKeyboardButton("🖥️ SIU Guaraní",               url="https://estudiantes.unpaz.edu.ar/autogestion/"),
             types.InlineKeyboardButton("📄 Plan de Estudios",          callback_data="plan_info"),
             types.InlineKeyboardButton("📩 Contactos y Mesa de Ayuda", callback_data="ver_contactos"),
         )
@@ -304,7 +304,6 @@ def callback_global(call):
     # ── Votar ──
     if d.startswith("tal_votar_"):
         partes = d.split("_")
-        # tal_votar_{idx}_{estrellas}
         idx      = int(partes[2])
         estrellas = int(partes[3])
         registrar_voto(bot, call, idx, estrellas)
@@ -407,5 +406,5 @@ if __name__ == "__main__":
             print("🚀 Bot TUCE — Talentos + Rating + IA")
             bot.infinity_polling(timeout=40)
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error crítico en polling: {e}")
             time.sleep(10)

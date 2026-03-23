@@ -58,6 +58,7 @@ votos_cache = {}
 
 def normalizar_categoria(texto: str) -> str:
     """Elimina emojis para comparación robusta entre bot y Sheet."""
+    if not texto: return ""
     resultado = ""
     for char in texto:
         cat = unicodedata.category(char)
@@ -103,34 +104,43 @@ def formatear_web(texto: str) -> str:
 
 def leer_talentos_desde_sheet() -> list:
     try:
-        r = requests.get(SHEET_CSV_URL, timeout=5)
+        # Agregamos cache_bust para forzar a Google a dar datos frescos y subimos timeout
+        r = requests.get(f"{SHEET_CSV_URL}&cb={int(time.time())}", timeout=12)
         if r.status_code != 200:
+            print(f"⚠️ Error HTTP al leer talentos: {r.status_code}")
             return []
-        reader  = csv.reader(io.StringIO(r.text))
-        filas   = list(reader)
+        
+        # Usamos DictReader para mayor seguridad si cambian las columnas
+        f = io.StringIO(r.text)
+        reader = csv.reader(f)
+        filas = list(reader)
+        
         talentos = []
+        if not filas or len(filas) < 2: return []
+
         for i, cols in enumerate(filas[1:]):
-            if len(cols) >= 8:
+            # Verificamos que la fila tenga contenido mínimo (ID y Nombre)
+            if len(cols) >= 3 and cols[1].strip():
                 talentos.append({
                     "idx":         i,
                     "timestamp":   cols[0].strip(),
                     "telegram_id": cols[1].strip(),
                     "nombre":      cols[2].strip(),
-                    "username":    cols[3].strip(),
-                    "categoria":   cols[4].strip(),
-                    "anio":        cols[5].strip(),
-                    "bio":         cols[6].strip(),
-                    "web":         cols[7].strip(),
-                    "foto_id":     cols[8].strip() if len(cols) > 8 else "",
+                    "username":    cols[3].strip() if len(cols) > 3 else "Sin usuario",
+                    "categoria":   cols[4].strip() if len(cols) > 4 else "Sin categoría",
+                    "anio":        cols[5].strip() if len(cols) > 5 else "",
+                    "bio":         cols[6].strip() if len(cols) > 6 else "",
+                    "web":         cols[7].strip() if len(cols) > 7 else "",
+                    "foto_id":     cols[8].strip() if len(cols) > 8 else "sin_foto",
                 })
         return talentos
     except Exception as e:
-        print(f"❌ Error leyendo talentos: {e}")
+        print(f"❌ Error crítico leyendo talentos: {e}")
         return []
 
 def leer_votos() -> list:
     try:
-        r = requests.get(SHEET_VOTOS_URL, timeout=5)
+        r = requests.get(f"{SHEET_VOTOS_URL}&cb={int(time.time())}", timeout=10)
         if r.status_code != 200:
             return []
         reader = csv.reader(io.StringIO(r.text))
@@ -198,7 +208,7 @@ def enviar_a_form(datos: dict) -> bool:
         FIELD_FOTO_ID:     datos.get("foto_id", "sin_foto"),
     }
     try:
-        r = requests.post(FORM_URL, data=payload, timeout=10)
+        r = requests.post(FORM_URL, data=payload, timeout=12)
         return r.status_code in [200, 302]
     except Exception as e:
         print(f"❌ Error enviando talento: {e}")
@@ -437,7 +447,10 @@ def mostrar_talentos_por_categoria(bot, call, categoria):
     bot.answer_callback_query(call.id, "Buscando talentos...")
     talentos  = leer_talentos_desde_sheet()
     votos     = leer_votos()
-    filtrados = [t for t in talentos if normalizar_categoria(t["categoria"]) == normalizar_categoria(categoria)]
+    
+    # Normalizamos ambos para evitar fallos por emojis o espacios
+    cat_norm = normalizar_categoria(categoria)
+    filtrados = [t for t in talentos if normalizar_categoria(t.get("categoria", "")) == cat_norm]
 
     if not filtrados:
         markup = types.InlineKeyboardMarkup()
@@ -452,7 +465,7 @@ def mostrar_talentos_por_categoria(bot, call, categoria):
     markup = types.InlineKeyboardMarkup(row_width=1)
     texto = f"*{categoria}* — {len(filtrados)} talento(s)\n\n"
 
-    for t in filtrados[:10]:
+    for t in filtrados[:15]: # Aumentado a 15 para mejor visibilidad
         nombre   = t.get("nombre", "Sin nombre")
         anio     = t.get("anio", "")
         bio      = t.get("bio", "")[:60]
@@ -474,7 +487,7 @@ def mostrar_perfil_individual(bot, call, idx: int):
     votos    = leer_votos()
     talento  = next((t for t in talentos if t["idx"] == idx), None)
     if not talento:
-        bot.send_message(call.message.chat.id, "❌ Perfil no encontrado.")
+        bot.send_message(call.message.chat.id, "❌ Perfil no encontrado o actualizado recientemente. Probá de nuevo.")
         return
     enviar_tarjeta_talento(bot, call.message.chat.id, talento,
                             viewer_id=call.from_user.id, votos=votos)
