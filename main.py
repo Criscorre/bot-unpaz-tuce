@@ -75,18 +75,18 @@ DATA_PLAN = {
 }
 DATA_BOT_INFO = {
     "bot_equivalencias": "⚖️ *Equivalencias:* Trámite formal del 01/04 al 10/04/2026.",
-    "bot_boleto":         "🚌 *Boleto Estudiantil:* Gestión vía SIU Guaraní para alumnos regulares.",
+    "bot_boleto":          "🚌 *Boleto Estudiantil:* Gestión vía SIU Guaraní para alumnos regulares.",
     "bot_certificados":  "📄 *Certificaciones:* Emisión digital de certificados vía SIU Guaraní.",
     "bot_inscripcion":    "✍️ *Inscripción:* Únicamente por SIU Guaraní en fechas publicadas."
 }
 URLS_UNPAZ = {
-    "tuce":         "https://unpaz.edu.ar/comercioelectronico",
-    "becas":        "https://unpaz.edu.ar/bienestar/becas",
-    "calendario":   "https://unpaz.edu.ar/calendario-academico",
-    "ingreso":      "https://unpaz.edu.ar/estudiaenunpaz",
+    "tuce":          "https://unpaz.edu.ar/comercioelectronico",
+    "becas":         "https://unpaz.edu.ar/bienestar/becas",
+    "calendario":    "https://unpaz.edu.ar/calendario-academico",
+    "ingreso":       "https://unpaz.edu.ar/estudiaenunpaz",
     "equivalencias":"https://unpaz.edu.ar/formularioequivalencias",
-    "pasantias":    "https://unpaz.edu.ar/pasantias",
-    "reglamento":   "https://unpaz.edu.ar/regimen-general-de-estudios",
+    "pasantias":     "https://unpaz.edu.ar/pasantias",
+    "reglamento":    "https://unpaz.edu.ar/regimen-general-de-estudios",
 }
 
 def obtener_info_web(url):
@@ -129,7 +129,7 @@ def registrar_usuario(user):
                 FORM_USUARIOS_ID:       str(user.id),
                 FORM_USUARIOS_NOMBRE:   user.first_name or "",
                 FORM_USUARIOS_USERNAME: f"@{user.username}" if user.username else "Sin usuario",
-                FORM_USUARIOS_FECHA:    time.strftime("%Y-%m-%d %H:%M:%S"),
+                FORM_USUARIOS_FECHA:     time.strftime("%Y-%m-%d %H:%M:%S"),
             })
         except:
             pass
@@ -204,7 +204,7 @@ def manejar_mensajes(message):
             types.InlineKeyboardButton("📝 Ingresantes",   callback_data="cal_Ingresantes"),
             types.InlineKeyboardButton("1️⃣ 1er Semestre", callback_data="cal_Primer Semestre"),
             types.InlineKeyboardButton("2️⃣ 2do Semestre", callback_data="cal_Segundo Semestre"),
-            types.InlineKeyboardButton("☀️ Verano 2027",  callback_data="cal_Verano 2027"),
+            types.InlineKeyboardButton("☀️ Verano 2027",   callback_data="cal_Verano 2027"),
         )
         bot.send_message(message.chat.id, "🗓️ *Calendario Académico:*", reply_markup=markup, parse_mode="Markdown")
 
@@ -213,7 +213,7 @@ def manejar_mensajes(message):
         markup.add(
             types.InlineKeyboardButton("⚖️ Equivalencias",      callback_data="bot_equivalencias"),
             types.InlineKeyboardButton("🚌 Boleto Estudiantil", callback_data="bot_boleto"),
-            types.InlineKeyboardButton("📄 Certificados",       callback_data="bot_certificados"),
+            types.InlineKeyboardButton("📄 Certificados",        callback_data="bot_certificados"),
             types.InlineKeyboardButton("✍️ Inscripción",        callback_data="bot_inscripcion"),
             types.InlineKeyboardButton("💬 Consultar a la IA",  callback_data="ia_modo"),
         )
@@ -276,6 +276,13 @@ def callback_global(call):
         iniciar_registro(bot, FakeMsg(call))
         return
 
+    if d == "tal_menu_principal":
+        bot.answer_callback_query(call.id)
+        # Limpiamos el mensaje anterior para que no se dupliquen menús
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        menu_talentos(bot, call.message)
+        return
+
     if d.startswith("tal_cat_"):
         paso_categoria(bot, call, d.replace("tal_cat_",""))
         return
@@ -290,11 +297,15 @@ def callback_global(call):
         return
 
     if d.startswith("tal_ver_"):
-        mostrar_talentos_por_categoria(bot, call, d.replace("tal_ver_",""))
+        # Extraemos la categoría y limpiamos el callback
+        categoria = d.replace("tal_ver_","")
+        mostrar_talentos_por_categoria(bot, call, categoria)
         return
 
     if d.startswith("tal_perfil_"):
-        mostrar_perfil_individual(bot, call, int(d.replace("tal_perfil_","")))
+        # Aseguramos que el ID se pase como texto para Firebase
+        tid = d.replace("tal_perfil_","")
+        mostrar_perfil_individual(bot, call, tid)
         return
 
     if d == "tal_destacados":
@@ -304,7 +315,8 @@ def callback_global(call):
     # ── Votar ──
     if d.startswith("tal_votar_"):
         partes = d.split("_")
-        idx      = int(partes[2])
+        # partes[0]=tal, partes[1]=votar, partes[2]=ID, partes[3]=estrellas
+        idx       = partes[2] 
         estrellas = int(partes[3])
         registrar_voto(bot, call, idx, estrellas)
         return
@@ -315,15 +327,15 @@ def callback_global(call):
 
     # ── Editar / Eliminar ──
     if d.startswith("tal_editar_"):
-        iniciar_edicion(bot, call, int(d.replace("tal_editar_","")))
+        iniciar_edicion(bot, call, d.replace("tal_editar_",""))
         return
 
     if d.startswith("tal_eliminar_"):
-        confirmar_eliminacion(bot, call, int(d.replace("tal_eliminar_","")))
+        confirmar_eliminacion(bot, call, d.replace("tal_eliminar_",""))
         return
 
     if d.startswith("tal_confirm_del_"):
-        ejecutar_eliminacion(bot, call, int(d.replace("tal_confirm_del_","")))
+        ejecutar_eliminacion(bot, call, d.replace("tal_confirm_del_",""))
         return
 
     # ── Calendario ──

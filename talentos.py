@@ -150,7 +150,6 @@ def paso_foto(bot, message):
     uid = message.from_user.id
     if uid not in estados_talentos: return False
     
-    # Si manda foto la guardamos, si manda texto (como "Listo" u "Omitir") va sin foto
     if message.content_type == "photo":
         fid = message.photo[-1].file_id
     else:
@@ -159,25 +158,22 @@ def paso_foto(bot, message):
     estados_talentos[uid]["datos"]["foto_id"] = fid
     
     try:
-        # Guardamos en Firebase usando el ID de telegram como llave
         db.reference('talentos').child(str(uid)).set(estados_talentos[uid]["datos"])
         
-        # Guardamos copia local de los datos para el mensaje final antes de borrar el estado
-        datos_finales = estados_talentos[uid]["datos"]
-        del estados_talentos[uid]
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🔙 Volver al Menú", callback_data="tal_menu_principal"))
         
         bot.send_message(
             message.chat.id, 
-            f"🎉 *¡Perfil guardado!*\n\n"
-            f"👤 *Nombre:* {datos_finales.get('nombre')}\n"
-            f"🏷️ *Categoría:* {datos_finales.get('categoria')}\n\n"
-            "Ya podés consultarlo en el explorador de talentos.",
+            "🎉 *¡Perfil guardado con éxito!*",
+            reply_markup=markup,
             parse_mode="Markdown"
         )
+        del estados_talentos[uid]
         return True
     except Exception as e:
-        print(f"❌ Error al guardar en Firebase: {e}")
-        bot.send_message(message.chat.id, "⚠️ Hubo un error al guardar tu perfil. Reintentá en unos momentos.")
+        print(f"❌ Error Firebase: {e}")
+        bot.send_message(message.chat.id, "⚠️ Error al guardar. Reintentá.")
         return False
 
 # ─────────────────────────────────────────────
@@ -209,18 +205,24 @@ def mostrar_perfil_individual(bot, call, tid):
     t = next((x for x in talentos if str(x.get("telegram_id")) == str(tid)), None)
     if not t: return
     
-    prom, nv = calcular_rating(tid, votos)
+    prom, nv = calcular_rating(str(tid), votos)
     txt = (f"👤 *{t.get('nombre')}*\n{t.get('categoria')} · {t.get('anio')}\n\n"
            f"_{t.get('bio')}_\n\n"
            f"🌐 {t.get('web')}\n"
            f"⭐ {estrellas_emoji(prom)} {prom}/5 ({nv} votos)")
 
     markup = types.InlineKeyboardMarkup(row_width=5)
-    # Si no es su propio perfil, puede votar
     if str(call.from_user.id) != str(tid):
-        markup.add(*(types.InlineKeyboardButton(f"{i}⭐", callback_data=f"tal_votar_{tid}_{i}") for i in range(1,6)))
+        ya_voto = any(str(v.get("voter_id")) == str(call.from_user.id) and str(v.get("talento_id")) == str(tid) for v in votos)
+        if not ya_voto:
+            markup.add(*(types.InlineKeyboardButton(f"{i}⭐", callback_data=f"tal_votar_{tid}_{i}") for i in range(1,6)))
+        else:
+            markup.add(types.InlineKeyboardButton("✅ Ya calificaste", callback_data="tal_noop"))
     
-    markup.add(types.InlineKeyboardButton("⬅️ Volver", callback_data=f"tal_ver_{t.get('categoria')}"))
+    # Botón Volver Dinámico
+    cat_talento = t.get('categoria', '')
+    markup.add(types.InlineKeyboardButton("⬅️ Volver a la lista", callback_data=f"tal_ver_{cat_talento}"))
+    markup.add(types.InlineKeyboardButton("🏠 Menú Principal", callback_data="tal_menu_principal"))
     
     if t.get("foto_id") != "sin_foto":
         bot.send_photo(call.message.chat.id, t.get("foto_id"), caption=txt, reply_markup=markup, parse_mode="Markdown")
@@ -228,9 +230,9 @@ def mostrar_perfil_individual(bot, call, tid):
         bot.send_message(call.message.chat.id, txt, reply_markup=markup, parse_mode="Markdown")
 
 def registrar_voto(bot, call, tid, estrellas):
-    vid = call.from_user.id
+    vid = str(call.from_user.id)
     db.reference('votos').child(f"{vid}_{tid}").set({
-        "voter_id": str(vid), "talento_id": str(tid), "estrellas": int(estrellas)
+        "voter_id": vid, "talento_id": str(tid), "estrellas": int(estrellas)
     })
     bot.answer_callback_query(call.id, f"¡Diste {estrellas} estrellas!")
     mostrar_perfil_individual(bot, call, tid)
@@ -249,7 +251,7 @@ def mostrar_destacados(bot, call):
         res += f"• {t.get('nombre')} - {p}⭐ ({n} v.)\n"
     
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("⬅️ Volver", callback_data="tal_explorar"))
+    markup.add(types.InlineKeyboardButton("⬅️ Volver", callback_data="tal_menu_principal"))
     bot.edit_message_text(res, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
 def iniciar_edicion(bot, call, tid): pass
