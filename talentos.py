@@ -15,13 +15,18 @@ FIELD_BIO         = "entry.852614958"
 FIELD_WEB         = "entry.1049166554"
 FIELD_FOTO_ID     = "entry.452793589"
 
-# --- SHEET IDs ---
-SHEET_ID           = "1EDHX8juohDWDP0NaISaKUhmurL4ZqfwbAItVSD4Mn3E"
-SHEET_CSV_URL      = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Form_Responses"
-SHEET_VOTOS_URL    = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=votos"
+# --- GOOGLE FORM VOTOS ---
+FORM_VOTOS_URL       = "https://docs.google.com/forms/d/e/1FAIpQLSdlSuIG5gTDvcp71jFLKUo8BfZlcu_uZ5bBX62yEn1_B7f-ww/formResponse"
+FIELD_VOTER_ID       = "entry.1171672904"
+FIELD_TALENTO_ID     = "entry.1795842410"
+FIELD_ESTRELLAS      = "entry.399597954"
+FIELD_FECHA_VOTO     = "entry.1646839553"
 
-# Form para registrar votos (usamos el mismo sheet via URL append — ver función votar)
-SHEET_VOTOS_APPEND = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/values/votos!A:D:append?valueInputOption=RAW"
+# --- SHEETS ---
+SHEET_TALENTOS_ID  = "1EDHX8juohDWDP0NaISaKUhmurL4ZqfwbAItVSD4Mn3E"
+SHEET_VOTOS_ID     = "1HGCPojrHSygQPt9wL67rWwNSkU3OLlFHWpmIygZ2I98"
+SHEET_CSV_URL      = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT8DocuqEQ1B64cPxj7QdvRhwGm33xTSiQ5jbvV573ZMw65knP6zR_fWcIUYjjFbpEooFxhh1KDdAIA/pub?gid=223881563&single=true&output=csv"
+SHEET_VOTOS_URL    = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQmRdcceKVNXJTZYfPsKKU4S7tje_6E52PjZY6pxAaov0LMC2AukxKBvmVW2b_q0lLuaW9D_X3Gqt9i/pub?gid=912500209&single=true&output=csv"
 
 # --- CATEGORÍAS ---
 CATEGORIAS = [
@@ -43,9 +48,8 @@ PASOS_PREGUNTAS = {
     "foto":     "📸 *Paso 7/7 — Foto de perfil*\nMandame una foto o escribí `omitir`",
 }
 
-# Estados conversacionales
 estados_talentos = {}
-# Cache de votos en memoria para evitar spam { "voter_id:talento_id": True }
+# Cache en memoria para evitar doble voto en la misma sesión
 votos_cache = {}
 
 
@@ -54,52 +58,34 @@ votos_cache = {}
 # ─────────────────────────────────────────────
 
 def normalizar_link(texto: str) -> str:
-    """Convierte cualquier mención de red social en link clickeable."""
     if not texto or texto.lower() in ["no tengo", "sin web", ""]:
         return None
     t = texto.strip()
-
-    # Ya es una URL válida
     if t.startswith("http://") or t.startswith("https://"):
         return t
-
-    # Instagram: @usuario o instagram.com/usuario o "Instagram @usuario"
     ig = re.search(r'(?:instagram\.com/|ig:|instagram\s*[@:]?\s*)@?([\w.]+)', t, re.IGNORECASE)
     if ig:
         return f"https://instagram.com/{ig.group(1)}"
     if t.startswith("@"):
         return f"https://instagram.com/{t[1:]}"
-
-    # LinkedIn
     li = re.search(r'linkedin\.com/in/([\w-]+)', t, re.IGNORECASE)
     if li:
         return f"https://linkedin.com/in/{li.group(1)}"
-
-    # Behance
     be = re.search(r'behance\.net/([\w]+)', t, re.IGNORECASE)
     if be:
         return f"https://behance.net/{be.group(1)}"
-
-    # Dominio sin http
     if re.match(r'^[\w-]+\.[\w.-]+', t):
         return f"https://{t}"
-
     return None
 
 def formatear_web(texto: str) -> str:
-    """Devuelve texto formateado con link para Telegram."""
     url = normalizar_link(texto)
     if not url:
         return None
-    # Detectar red social para el label
-    if "instagram.com" in url:
-        return f"[📸 Instagram]({url})"
-    if "linkedin.com" in url:
-        return f"[💼 LinkedIn]({url})"
-    if "behance.net" in url:
-        return f"[🎨 Behance]({url})"
-    if "github.com" in url:
-        return f"[💻 GitHub]({url})"
+    if "instagram.com" in url:  return f"[📸 Instagram]({url})"
+    if "linkedin.com"  in url:  return f"[💼 LinkedIn]({url})"
+    if "behance.net"   in url:  return f"[🎨 Behance]({url})"
+    if "github.com"    in url:  return f"[💻 GitHub]({url})"
     return f"[🌐 Web/Portfolio]({url})"
 
 
@@ -131,7 +117,7 @@ def leer_talentos_desde_sheet() -> list:
                 })
         return talentos
     except Exception as e:
-        print(f"❌ Error leyendo Sheet: {e}")
+        print(f"❌ Error leyendo talentos: {e}")
         return []
 
 def leer_votos() -> list:
@@ -143,12 +129,12 @@ def leer_votos() -> list:
         votos = []
         for linea in lineas[1:]:
             cols = [c.strip().strip('"') for c in linea.split(",")]
-            if len(cols) >= 3:
+            if len(cols) >= 4:
                 votos.append({
-                    "voter_id":   cols[0],
-                    "talento_id": cols[1],
-                    "estrellas":  cols[2],
-                    "fecha":      cols[3] if len(cols) > 3 else "",
+                    "voter_id":   cols[1],
+                    "talento_id": cols[2],
+                    "estrellas":  cols[3],
+                    "fecha":      cols[4] if len(cols) > 4 else "",
                 })
         return votos
     except Exception as e:
@@ -156,8 +142,7 @@ def leer_votos() -> list:
         return []
 
 def calcular_rating(talento_id: str, votos: list) -> tuple:
-    """Devuelve (promedio, cantidad_votos) para un talento."""
-    mis_votos = [v for v in votos if v["talento_id"] == talento_id]
+    mis_votos = [v for v in votos if v["talento_id"] == str(talento_id)]
     if not mis_votos:
         return (0.0, 0)
     try:
@@ -170,21 +155,28 @@ def estrellas_emoji(promedio: float) -> str:
     llenas = int(round(promedio))
     return "⭐" * llenas + "☆" * (5 - llenas)
 
-def enviar_voto_a_sheet(voter_id: str, talento_id: str, estrellas: int) -> bool:
-    """Registra el voto en la hoja 'votos' via Google Forms o append directo."""
-    # Usamos un Form separado para votos — por ahora guardamos en memoria y CSV
-    # Para producción, crear un segundo Google Form con campos: voter_id, talento_id, estrellas, fecha
-    # Por ahora lo guardamos en cache de memoria (persiste mientras el bot no se reinicia)
-    key = f"{voter_id}:{talento_id}"
-    votos_cache[key] = estrellas
-    print(f"⭐ VOTO: {voter_id} → talento {talento_id} = {estrellas} estrellas")
-    return True
-
 def ya_voto(voter_id: str, talento_id: str, votos_sheet: list) -> bool:
     key = f"{voter_id}:{talento_id}"
     if key in votos_cache:
         return True
-    return any(v["voter_id"] == str(voter_id) and v["talento_id"] == str(talento_id) for v in votos_sheet)
+    return any(
+        v["voter_id"] == str(voter_id) and v["talento_id"] == str(talento_id)
+        for v in votos_sheet
+    )
+
+def enviar_voto_a_form(voter_id: str, talento_id: str, estrellas: int) -> bool:
+    payload = {
+        FIELD_VOTER_ID:   str(voter_id),
+        FIELD_TALENTO_ID: str(talento_id),
+        FIELD_ESTRELLAS:  str(estrellas),
+        FIELD_FECHA_VOTO: time.strftime("%Y-%m-%d"),
+    }
+    try:
+        r = requests.post(FORM_VOTOS_URL, data=payload, timeout=10)
+        return r.status_code in [200, 302]
+    except Exception as e:
+        print(f"❌ Error enviando voto: {e}")
+        return False
 
 def enviar_a_form(datos: dict) -> bool:
     payload = {
@@ -201,7 +193,7 @@ def enviar_a_form(datos: dict) -> bool:
         r = requests.post(FORM_URL, data=payload, timeout=10)
         return r.status_code in [200, 302]
     except Exception as e:
-        print(f"❌ Error enviando a Form: {e}")
+        print(f"❌ Error enviando talento: {e}")
         return False
 
 def pedir_anio(bot, chat_id):
@@ -235,7 +227,7 @@ def menu_talentos(bot, message):
 
 
 # ─────────────────────────────────────────────
-#  FLUJO REGISTRO — orden fijo
+#  FLUJO REGISTRO
 #  categoria → nombre → username → anio → bio → web → foto
 # ─────────────────────────────────────────────
 
@@ -350,12 +342,10 @@ def paso_foto(bot, message) -> bool:
 
 
 # ─────────────────────────────────────────────
-#  MOSTRAR TARJETA DE TALENTO (con foto + links + rating)
+#  TARJETA DE TALENTO
 # ─────────────────────────────────────────────
 
-def enviar_tarjeta_talento(bot, chat_id, talento: dict, viewer_id: int,
-                            votos: list, editable: bool = False):
-    """Envía foto (si tiene) + tarjeta completa del talento con botones."""
+def enviar_tarjeta_talento(bot, chat_id, talento: dict, viewer_id: int, votos: list):
     nombre   = talento.get("nombre", "Sin nombre")
     username = talento.get("username", "")
     anio     = talento.get("anio", "")
@@ -366,14 +356,12 @@ def enviar_tarjeta_talento(bot, chat_id, talento: dict, viewer_id: int,
     tid      = talento.get("telegram_id", "")
     idx      = talento.get("idx", 0)
 
-    # Rating
     promedio, nvotes = calcular_rating(str(idx), votos)
-    rating_txt = f"{estrellas_emoji(promedio)} {promedio}/5 ({nvotes} voto{'s' if nvotes != 1 else ''})" if nvotes > 0 else "Sin votos aún"
+    rating_txt = (f"{estrellas_emoji(promedio)} {promedio}/5 ({nvotes} voto{'s' if nvotes!=1 else ''})"
+                  if nvotes > 0 else "Sin votos aún — ¡sé el primero!")
 
-    # Web formateada
     web_fmt = formatear_web(web)
 
-    # Armar texto tarjeta
     texto = (
         f"👤 *{nombre}*\n"
         f"{cat} · {anio}\n\n"
@@ -383,10 +371,9 @@ def enviar_tarjeta_talento(bot, chat_id, talento: dict, viewer_id: int,
         texto += f"{web_fmt}\n"
     texto += f"\n⭐ *Rating:* {rating_txt}"
 
-    # Botones
     markup = types.InlineKeyboardMarkup(row_width=5)
 
-    # Votar — 5 botones de estrella
+    # Botones de votación
     ya = ya_voto(str(viewer_id), str(idx), votos)
     if not ya:
         markup.add(
@@ -404,11 +391,11 @@ def enviar_tarjeta_talento(bot, chat_id, talento: dict, viewer_id: int,
         tg = username.replace("@", "")
         markup.add(types.InlineKeyboardButton(f"💬 Contactar a {nombre}", url=f"https://t.me/{tg}"))
 
-    # Editar / Eliminar (solo el dueño)
-    if editable or str(viewer_id) == str(tid):
+    # Editar / Eliminar solo para el dueño
+    if str(viewer_id) == str(tid):
         markup.add(
-            types.InlineKeyboardButton("✏️ Editar mi perfil",   callback_data=f"tal_editar_{idx}"),
-            types.InlineKeyboardButton("🗑️ Eliminar mi perfil", callback_data=f"tal_eliminar_{idx}"),
+            types.InlineKeyboardButton("✏️ Editar perfil",   callback_data=f"tal_editar_{idx}"),
+            types.InlineKeyboardButton("🗑️ Eliminar perfil", callback_data=f"tal_eliminar_{idx}"),
         )
 
     markup.add(types.InlineKeyboardButton("⬅️ Volver", callback_data=f"tal_ver_{cat}"))
@@ -420,7 +407,7 @@ def enviar_tarjeta_talento(bot, chat_id, talento: dict, viewer_id: int,
                            reply_markup=markup, parse_mode="Markdown")
             return
         except:
-            pass  # Si falla la foto, manda solo texto
+            pass
 
     bot.send_message(chat_id, texto, reply_markup=markup,
                      parse_mode="Markdown", disable_web_page_preview=False)
@@ -458,7 +445,6 @@ def mostrar_talentos_por_categoria(bot, call, categoria):
         )
         return
 
-    # Lista resumen con botón para ver cada perfil completo
     markup = types.InlineKeyboardMarkup(row_width=1)
     texto = f"*{categoria}* — {len(filtrados)} talento(s)\n\n"
 
@@ -469,7 +455,6 @@ def mostrar_talentos_por_categoria(bot, call, categoria):
         idx      = t.get("idx", 0)
         promedio, nvotes = calcular_rating(str(idx), votos)
         stars = estrellas_emoji(promedio) if nvotes > 0 else ""
-
         texto += f"👤 *{nombre}* · {anio} {stars}\n_{bio}..._\n\n"
         markup.add(types.InlineKeyboardButton(
             f"Ver perfil de {nombre}", callback_data=f"tal_perfil_{idx}"
@@ -480,7 +465,6 @@ def mostrar_talentos_por_categoria(bot, call, categoria):
                           reply_markup=markup, parse_mode="Markdown")
 
 def mostrar_perfil_individual(bot, call, idx: int):
-    """Muestra la tarjeta completa de un talento específico."""
     bot.answer_callback_query(call.id)
     talentos = leer_talentos_desde_sheet()
     votos    = leer_votos()
@@ -496,13 +480,11 @@ def mostrar_destacados(bot, call):
     talentos = leer_talentos_desde_sheet()
     votos    = leer_votos()
 
-    # Calcular rating de cada talento
     ranked = []
     for t in talentos:
         promedio, nvotes = calcular_rating(str(t["idx"]), votos)
-        if nvotes >= 1:  # mínimo 1 voto para aparecer
+        if nvotes >= 1:
             ranked.append((t, promedio, nvotes))
-
     ranked.sort(key=lambda x: x[1], reverse=True)
     top = ranked[:5]
 
@@ -510,16 +492,15 @@ def mostrar_destacados(bot, call):
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("⬅️ Volver", callback_data="tal_explorar"))
         bot.edit_message_text(
-            "⭐ *Talentos Destacados*\n\nTodavía nadie recibió votos.\n"
-            "¡Explorá los perfiles y empezá a votar!",
+            "⭐ *Talentos Destacados*\n\nTodavía nadie recibió votos.\n¡Explorá los perfiles y empezá a votar!",
             call.message.chat.id, call.message.message_id,
             reply_markup=markup, parse_mode="Markdown"
         )
         return
 
+    medallas = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
     texto = "⭐ *Top Talentos TUCE*\n\n"
     markup = types.InlineKeyboardMarkup(row_width=1)
-    medallas = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
 
     for i, (t, prom, nv) in enumerate(top):
         nombre = t.get("nombre", "")
@@ -546,10 +527,17 @@ def registrar_voto(bot, call, idx: int, estrellas: int):
         bot.answer_callback_query(call.id, "Ya votaste este perfil.", show_alert=True)
         return
 
-    enviar_voto_a_sheet(str(voter_id), str(idx), estrellas)
-    bot.answer_callback_query(call.id, f"¡Gracias! Diste {estrellas}⭐", show_alert=True)
+    # Guardar en cache local y en Google Form (persistente)
+    key = f"{voter_id}:{idx}"
+    votos_cache[key] = estrellas
+    exito = enviar_voto_a_form(str(voter_id), str(idx), estrellas)
 
-    # Refrescar la tarjeta
+    if exito:
+        bot.answer_callback_query(call.id, f"¡Gracias! Diste {estrellas}⭐", show_alert=True)
+    else:
+        bot.answer_callback_query(call.id, f"Voto registrado: {estrellas}⭐", show_alert=True)
+
+    # Refrescar tarjeta
     talentos = leer_talentos_desde_sheet()
     votos    = leer_votos()
     talento  = next((t for t in talentos if t["idx"] == idx), None)
@@ -567,20 +555,13 @@ def registrar_voto(bot, call, idx: int, estrellas: int):
 # ─────────────────────────────────────────────
 
 def iniciar_edicion(bot, call, idx: int):
-    """Muestra opciones de qué campo editar."""
-    user_id = call.from_user.id
+    user_id  = call.from_user.id
     talentos = leer_talentos_desde_sheet()
     talento  = next((t for t in talentos if t["idx"] == idx), None)
 
     if not talento or str(talento.get("telegram_id","")) != str(user_id):
         bot.answer_callback_query(call.id, "Solo podés editar tu propio perfil.", show_alert=True)
         return
-
-    estados_talentos[user_id] = {
-        "paso": "editando",
-        "idx":  idx,
-        "datos": dict(talento)
-    }
 
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -596,7 +577,7 @@ def iniciar_edicion(bot, call, idx: int):
                      reply_markup=markup, parse_mode="Markdown")
 
 def confirmar_eliminacion(bot, call, idx: int):
-    user_id = call.from_user.id
+    user_id  = call.from_user.id
     talentos = leer_talentos_desde_sheet()
     talento  = next((t for t in talentos if t["idx"] == idx), None)
 
@@ -611,13 +592,11 @@ def confirmar_eliminacion(bot, call, idx: int):
     )
     bot.answer_callback_query(call.id)
     bot.send_message(call.message.chat.id,
-                     "⚠️ *¿Estás seguro que querés eliminar tu perfil?*\nEsta acción no se puede deshacer.",
+                     "⚠️ *¿Seguro que querés eliminar tu perfil?*",
                      reply_markup=markup, parse_mode="Markdown")
 
 def ejecutar_eliminacion(bot, call, idx: int):
-    """Marca el perfil como eliminado enviando un form con datos vacíos no es posible en Sheets,
-    así que notificamos al usuario que debe contactar al admin."""
-    user_id = call.from_user.id
+    user_id  = call.from_user.id
     talentos = leer_talentos_desde_sheet()
     talento  = next((t for t in talentos if t["idx"] == idx), None)
 
@@ -628,9 +607,7 @@ def ejecutar_eliminacion(bot, call, idx: int):
     bot.answer_callback_query(call.id)
     bot.send_message(
         call.message.chat.id,
-        "🗑️ Solicitud de eliminación registrada.\n\n"
-        "Para confirmar la baja de tu perfil escribí a @Btescr (admin) "
-        "o al grupo de la comunidad.\n\n"
-        "_Nota: la eliminación directa desde el bot estará disponible próximamente._",
+        "🗑️ Solicitud registrada. Para confirmar la baja escribí a @Btescr o al grupo de la comunidad.\n\n"
+        "_La eliminación directa desde el bot estará disponible próximamente._",
         parse_mode="Markdown"
     )
