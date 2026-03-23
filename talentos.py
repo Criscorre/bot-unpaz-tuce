@@ -20,7 +20,7 @@ FIELD_FOTO_ID     = "entry.452793589"
 # --- URL PÚBLICA DE LA SHEET (modo lectura) ---
 # Reemplazá SHEET_ID por el ID real de tu Google Sheet una vez que el form esté conectado
 # Lo encontrás en la URL: docs.google.com/spreadsheets/d/SHEET_ID/edit
-SHEET_ID = "TU_SHEET_ID_AQUI"
+SHEET_ID = "1EDHX8juohDWDP0NaISaKUhmurL4ZqfwbAItVSD4Mn3E"
 SHEET_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Sheet1"
 
 # --- CATEGORÍAS ---
