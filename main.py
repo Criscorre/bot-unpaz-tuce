@@ -8,29 +8,23 @@ from openai import OpenAI
 from info_unpaz import DATOS_TECNICATURA
 from materias_db import LISTA_HORARIOS
 from talentos import (
-    menu_talentos,
-    iniciar_registro,
-    mostrar_menu_explorar,
-    mostrar_talentos_por_categoria,
-    mostrar_perfil_individual,
-    mostrar_destacados,
-    registrar_voto,
-    iniciar_edicion,
-    confirmar_eliminacion,
-    ejecutar_eliminacion,
-    paso_categoria,
-    paso_foto,
-    paso_nombre,
-    paso_username,
-    paso_bio,
-    paso_anio,
-    paso_web,
-    estados_talentos,
+    menu_talentos, iniciar_registro, mostrar_menu_explorar,
+    mostrar_talentos_por_categoria, mostrar_perfil_individual,
+    mostrar_destacados, registrar_voto, iniciar_edicion,
+    confirmar_eliminacion, ejecutar_eliminacion,
+    paso_categoria, paso_foto, paso_nombre, paso_username,
+    paso_bio, paso_anio, paso_web, estados_talentos,
+)
+from herramientas import (
+    menu_herramientas, menu_banco, menu_ocr,
+    iniciar_subida, paso_materia_subir, paso_tipo_subir,
+    paso_archivo_subir, mostrar_buscar_materia,
+    mostrar_material_materia, descargar_archivo,
+    procesar_foto_ocr, generar_documento,
+    estados_herramientas,
 )
 
-import http.server
-import socketserver
-import threading
+import http.server, socketserver, threading
 
 def run_health_server():
     PORT = 8000
@@ -42,7 +36,7 @@ def run_health_server():
 
 threading.Thread(target=run_health_server, daemon=True).start()
 
-base_dir   = os.path.dirname(__file__)
+base_dir = os.path.dirname(__file__)
 load_dotenv(os.path.join(base_dir, '.env'))
 
 TOKEN          = os.getenv('TELEGRAM_TOKEN')
@@ -57,10 +51,14 @@ if not TOKEN or not OPENAI_API_KEY:
     print("❌ Error: credenciales no encontradas")
     exit()
 else:
-    print("✅ Bot TUCE iniciando — Talentos + Rating + IA mejorada")
+    print("✅ Bot TUCE iniciando — Talentos + Herramientas + IA")
 
 bot    = telebot.TeleBot(TOKEN)
 client = OpenAI(api_key=OPENAI_API_KEY)
+
+# Firebase
+import firebase_admin
+from firebase_admin import db as firebase_db
 
 DATA_CALENDARIO = {
     "Ingresantes":      "📝 *INFO INGRESANTES:*\n🔹 Inscripción CIU: 06/11 al 28/11/2025\n🔹 Desarrollo CIU: 02/02 al 28/02/2026",
@@ -75,33 +73,31 @@ DATA_PLAN = {
 }
 DATA_BOT_INFO = {
     "bot_equivalencias": "⚖️ *Equivalencias:* Trámite formal del 01/04 al 10/04/2026.",
-    "bot_boleto":          "🚌 *Boleto Estudiantil:* Gestión vía SIU Guaraní para alumnos regulares.",
+    "bot_boleto":        "🚌 *Boleto Estudiantil:* Gestión vía SIU Guaraní para alumnos regulares.",
     "bot_certificados":  "📄 *Certificaciones:* Emisión digital de certificados vía SIU Guaraní.",
-    "bot_inscripcion":    "✍️ *Inscripción:* Únicamente por SIU Guaraní en fechas publicadas."
+    "bot_inscripcion":   "✍️ *Inscripción:* Únicamente por SIU Guaraní en fechas publicadas."
 }
 URLS_UNPAZ = {
-    "tuce":          "https://unpaz.edu.ar/comercioelectronico",
-    "becas":         "https://unpaz.edu.ar/bienestar/becas",
-    "calendario":    "https://unpaz.edu.ar/calendario-academico",
-    "ingreso":       "https://unpaz.edu.ar/estudiaenunpaz",
+    "tuce":         "https://unpaz.edu.ar/comercioelectronico",
+    "becas":        "https://unpaz.edu.ar/bienestar/becas",
+    "calendario":   "https://unpaz.edu.ar/calendario-academico",
+    "ingreso":      "https://unpaz.edu.ar/estudiaenunpaz",
     "equivalencias":"https://unpaz.edu.ar/formularioequivalencias",
-    "pasantias":     "https://unpaz.edu.ar/pasantias",
-    "reglamento":    "https://unpaz.edu.ar/regimen-general-de-estudios",
+    "pasantias":    "https://unpaz.edu.ar/pasantias",
+    "reglamento":   "https://unpaz.edu.ar/regimen-general-de-estudios",
 }
 
 def obtener_info_web(url):
     try:
         import re
-        r = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
-        if r.status_code != 200:
-            return ""
+        r = requests.get(url, timeout=3, headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code != 200: return ""
         t = r.text
         t = re.sub(r'<style[^>]*>.*?</style>', '', t, flags=re.DOTALL)
         t = re.sub(r'<script[^>]*>.*?</script>', '', t, flags=re.DOTALL)
         t = re.sub(r'<[^>]+>', ' ', t)
         return re.sub(r'\s+', ' ', t).strip()[:3000]
-    except:
-        return ""
+    except: return ""
 
 def detectar_url_relevante(p):
     p = p.lower()
@@ -125,14 +121,13 @@ def registrar_usuario(user):
         print(f"Error registro local: {e}")
     if FORM_USUARIOS_URL and FORM_USUARIOS_ID:
         try:
-            requests.post(FORM_USUARIOS_URL, timeout=5, headers={"User-Agent": "Mozilla/5.0"}, data={
+            requests.post(FORM_USUARIOS_URL, timeout=3, data={
                 FORM_USUARIOS_ID:       str(user.id),
                 FORM_USUARIOS_NOMBRE:   user.first_name or "",
                 FORM_USUARIOS_USERNAME: f"@{user.username}" if user.username else "Sin usuario",
-                FORM_USUARIOS_FECHA:     time.strftime("%Y-%m-%d %H:%M:%S"),
+                FORM_USUARIOS_FECHA:    time.strftime("%Y-%m-%d %H:%M:%S"),
             })
-        except:
-            pass
+        except: pass
 
 def responder_ia(pregunta):
     ctx = f"{DATOS_TECNICATURA}\nCALENDARIO: {DATA_CALENDARIO}\nPLAN: {DATA_PLAN}\n"
@@ -141,16 +136,16 @@ def responder_ia(pregunta):
     if url:
         try:
             info = obtener_info_web(url)
-            if info:
-                ctx_web = f"\n\nINFO WEB {url}:\n{info}"
-        except:
-            pass
+            if info: ctx_web = f"\n\nINFO WEB {url}:\n{info}"
+        except: pass
     sistema = (
         "Sos el Asistente Virtual de la Comunidad TUCE - UNPAZ. "
-        "Respondés preguntas de estudiantes de la Tecnicatura en Comercio Electrónico. "
+        "Respondés SOLO preguntas relacionadas con la UNPAZ, la carrera TUCE, materias, trámites, becas, fechas y vida universitaria. "
+        "Si te preguntan algo que no tiene que ver con la UNPAZ o TUCE, decís amablemente que solo podés ayudar con temas de la carrera. "
         "Si te preguntan quién te creó, decís que fuiste desarrollado por Bytes Creativos. "
         "No decís que sos bot oficial. Respondés en español, claro y amigable. "
-        "Si no sabés, recomendás unpaz.edu.ar o la mesa de ayuda. "
+        "Cuando tenés info actualizada de la web de la UNPAZ, la usás para responder con precisión. "
+        "Si no sabés algo con certeza, recomendás unpaz.edu.ar o la mesa de ayuda. "
         "Contexto: " + ctx + ctx_web
     )
     try:
@@ -162,22 +157,42 @@ def responder_ia(pregunta):
         return r.choices[0].message.content
     except Exception as e:
         print(f"Error IA: {e}")
-        return "Servicio no disponible temporalmente. Por favor, consultá en unpaz.edu.ar"
+        return "Servicio no disponible. Consultá en unpaz.edu.ar"
+
+# ─────────────────────────────────────────────
+#  HANDLERS
+# ─────────────────────────────────────────────
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     registrar_usuario(message.from_user)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add("📚 Materias horarios","🗓️ Calendario","📍 Sedes","🖥️ Gestión Alumnos","🤖 Bot TUCE","🌟 Talentos TUCE")
-    bot.send_message(message.chat.id,
-                     "Bienvenido al *Bot de la Comunidad TUCE - UNPAZ*.\n\nSeleccione una opción del menú.",
-                     reply_markup=markup, parse_mode="Markdown")
+    markup.add(
+        "📚 Materias horarios", "🗓️ Calendario",
+        "📍 Sedes",             "🖥️ Gestión Alumnos",
+        "🤖 Bot TUCE",          "🌟 Talentos TUCE",
+        "🛠️ Herramientas",
+    )
+    bot.send_message(
+        message.chat.id,
+        "Bienvenido al *Bot de la Comunidad TUCE - UNPAZ*.\n\nSeleccione una opción del menú.",
+        reply_markup=markup, parse_mode="Markdown"
+    )
 
-@bot.message_handler(content_types=['text', 'photo'])
+@bot.message_handler(content_types=['text', 'photo', 'document'])
 def manejar_mensajes(message):
     user_id = message.from_user.id
 
-    # Flujo Talentos
+    # ── Flujo Herramientas ──
+    if user_id in estados_herramientas:
+        paso = estados_herramientas[user_id].get("paso")
+        if paso == "esperando_foto_ocr":
+            if message.content_type == "photo":
+                if procesar_foto_ocr(bot, message, client): return
+        if paso == "archivo_subir":
+            if paso_archivo_subir(bot, message, firebase_db): return
+
+    # ── Flujo Talentos ──
     if user_id in estados_talentos:
         paso = estados_talentos[user_id].get("paso")
         if paso == "foto"     and paso_foto(bot, message):     return
@@ -186,7 +201,7 @@ def manejar_mensajes(message):
         if paso == "bio"      and message.content_type=="text" and paso_bio(bot, message):      return
         if paso == "web"      and message.content_type=="text" and paso_web(bot, message):      return
 
-    if message.content_type == "photo":
+    if message.content_type in ["photo", "document"]:
         return
 
     txt = message.text
@@ -204,7 +219,7 @@ def manejar_mensajes(message):
             types.InlineKeyboardButton("📝 Ingresantes",   callback_data="cal_Ingresantes"),
             types.InlineKeyboardButton("1️⃣ 1er Semestre", callback_data="cal_Primer Semestre"),
             types.InlineKeyboardButton("2️⃣ 2do Semestre", callback_data="cal_Segundo Semestre"),
-            types.InlineKeyboardButton("☀️ Verano 2027",   callback_data="cal_Verano 2027"),
+            types.InlineKeyboardButton("☀️ Verano 2027",  callback_data="cal_Verano 2027"),
         )
         bot.send_message(message.chat.id, "🗓️ *Calendario Académico:*", reply_markup=markup, parse_mode="Markdown")
 
@@ -213,7 +228,7 @@ def manejar_mensajes(message):
         markup.add(
             types.InlineKeyboardButton("⚖️ Equivalencias",      callback_data="bot_equivalencias"),
             types.InlineKeyboardButton("🚌 Boleto Estudiantil", callback_data="bot_boleto"),
-            types.InlineKeyboardButton("📄 Certificados",        callback_data="bot_certificados"),
+            types.InlineKeyboardButton("📄 Certificados",       callback_data="bot_certificados"),
             types.InlineKeyboardButton("✍️ Inscripción",        callback_data="bot_inscripcion"),
             types.InlineKeyboardButton("💬 Consultar a la IA",  callback_data="ia_modo"),
         )
@@ -231,7 +246,7 @@ def manejar_mensajes(message):
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
             types.InlineKeyboardButton("🎓 Campus Virtual",            url="https://campusvirtual.unpaz.edu.ar/"),
-            types.InlineKeyboardButton("🖥️ SIU Guaraní",               url="https://estudiantes.unpaz.edu.ar/autogestion/"),
+            types.InlineKeyboardButton("🖥️ SIU Guaraní",              url="https://estudiantes.unpaz.edu.ar/autogestion/"),
             types.InlineKeyboardButton("📄 Plan de Estudios",          callback_data="plan_info"),
             types.InlineKeyboardButton("📩 Contactos y Mesa de Ayuda", callback_data="ver_contactos"),
         )
@@ -240,9 +255,13 @@ def manejar_mensajes(message):
     elif txt == "🌟 Talentos TUCE":
         menu_talentos(bot, message)
 
+    elif txt == "🛠️ Herramientas":
+        menu_herramientas(bot, message)
+
     else:
         FIJAS = {
-            "hola":"👋 ¡Hola! Usá el menú para navegar.","buenas":"👋 ¡Buenas! Usá el menú.",
+            "hola":"👋 ¡Hola! Usá el menú para navegar.",
+            "buenas":"👋 ¡Buenas! Usá el menú.",
             "gracias":"🙌 ¡De nada!","ok":"👍 ¡Perfecto!",
             "campus":"🎓 https://campusvirtual.unpaz.edu.ar/",
             "siu":"🖥️ https://estudiantes.unpaz.edu.ar/autogestion/",
@@ -268,7 +287,70 @@ def manejar_mensajes(message):
 def callback_global(call):
     d = call.data
 
-    # ── Talentos registro ──
+    # ── Herramientas ──
+    if d == "her_menu":
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("📂 Banco de material", callback_data="her_banco"),
+            types.InlineKeyboardButton("📸 Foto → Word / PDF", callback_data="her_ocr"),
+        )
+        bot.edit_message_text(
+            "🛠️ *Herramientas Estudiantes*\n\n¿Qué querés usar?",
+            call.message.chat.id, call.message.message_id,
+            reply_markup=markup, parse_mode="Markdown"
+        )
+        return
+
+    if d == "her_menu_msg":
+        bot.answer_callback_query(call.id)
+        menu_herramientas(bot, call.message)
+        return
+
+    if d == "her_banco":
+        menu_banco(bot, call)
+        return
+
+    if d == "her_ocr":
+        menu_ocr(bot, call)
+        return
+
+    if d == "her_subir":
+        iniciar_subida(bot, call)
+        return
+
+    if d == "her_buscar":
+        mostrar_buscar_materia(bot, call)
+        return
+
+    if d.startswith("her_mat_"):
+        paso_materia_subir(bot, call, d.replace("her_mat_", ""))
+        return
+
+    if d.startswith("her_tipo_"):
+        paso_tipo_subir(bot, call, d.replace("her_tipo_", ""))
+        return
+
+    if d.startswith("her_ver_"):
+        mostrar_material_materia(bot, call, d.replace("her_ver_", ""), firebase_db)
+        return
+
+    if d.startswith("her_dl_"):
+        descargar_archivo(bot, call, d.replace("her_dl_", ""), firebase_db)
+        return
+
+    if d == "her_fmt_word":
+        generar_documento(bot, call, "word", client)
+        return
+
+    if d == "her_fmt_pdf":
+        generar_documento(bot, call, "pdf", client)
+        return
+
+    if d == "her_fmt_ambos":
+        generar_documento(bot, call, "ambos", client)
+        return
+
+    # ── Talentos ──
     if d == "tal_registrar":
         bot.answer_callback_query(call.id)
         class FakeMsg:
@@ -278,8 +360,8 @@ def callback_global(call):
 
     if d == "tal_menu_principal":
         bot.answer_callback_query(call.id)
-        # Limpiamos el mensaje anterior para que no se dupliquen menús
-        bot.delete_message(call.message.chat.id, call.message.message_id)
+        try: bot.delete_message(call.message.chat.id, call.message.message_id)
+        except: pass
         menu_talentos(bot, call.message)
         return
 
@@ -291,41 +373,31 @@ def callback_global(call):
         paso_anio(bot, call, d.replace("tal_anio_",""))
         return
 
-    # ── Talentos explorar ──
     if d == "tal_explorar":
         mostrar_menu_explorar(bot, call, edit=True)
         return
 
     if d.startswith("tal_ver_"):
-        # Extraemos la categoría y limpiamos el callback
-        categoria = d.replace("tal_ver_","")
-        mostrar_talentos_por_categoria(bot, call, categoria)
+        mostrar_talentos_por_categoria(bot, call, d.replace("tal_ver_",""))
         return
 
     if d.startswith("tal_perfil_"):
-        # Aseguramos que el ID se pase como texto para Firebase
-        tid = d.replace("tal_perfil_","")
-        mostrar_perfil_individual(bot, call, tid)
+        mostrar_perfil_individual(bot, call, d.replace("tal_perfil_",""))
         return
 
     if d == "tal_destacados":
         mostrar_destacados(bot, call)
         return
 
-    # ── Votar ──
     if d.startswith("tal_votar_"):
         partes = d.split("_")
-        # partes[0]=tal, partes[1]=votar, partes[2]=ID, partes[3]=estrellas
-        idx       = partes[2] 
-        estrellas = int(partes[3])
-        registrar_voto(bot, call, idx, estrellas)
+        registrar_voto(bot, call, partes[2], int(partes[3]))
         return
 
     if d == "tal_noop":
         bot.answer_callback_query(call.id)
         return
 
-    # ── Editar / Eliminar ──
     if d.startswith("tal_editar_"):
         iniciar_edicion(bot, call, d.replace("tal_editar_",""))
         return
@@ -415,8 +487,8 @@ def callback_global(call):
 if __name__ == "__main__":
     while True:
         try:
-            print("🚀 Bot TUCE — Talentos + Rating + IA")
+            print("🚀 Bot TUCE — Talentos + Herramientas + IA")
             bot.infinity_polling(timeout=40)
         except Exception as e:
-            print(f"Error crítico en polling: {e}")
+            print(f"Error: {e}")
             time.sleep(10)
