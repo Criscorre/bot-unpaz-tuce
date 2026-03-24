@@ -3,3 +3,5 @@ python-dotenv==1.2.2
 openai==2.21.0
 requests==2.32.5
 firebase-admin
+python-docx
+fpdf2
