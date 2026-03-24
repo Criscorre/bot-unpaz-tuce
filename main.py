@@ -473,8 +473,7 @@ def callback_global(call):
         for f in LISTA_HORARIOS:
             if f[0] == mat_sel:
                 res += f"👥 *Com {f[1]}* | 🗓️ {f[2]} | ⏰ {f[3][:-3]} a {f[4][:-3]} hs.\n"
-                res += f"🏢 *Aula:* {f[8]}\n💻 *Mod:* {f[5]}\n📅 *Inicio Presencial:* {f[6]}\n"
-                if f[7] != "//": res += f"🌐 *Inicio Virtual:* {f[7]}\n"
+                res += f"🏢 *Aula:* {f[8]}\n💻 *Mod:* {f[5]}\n"
                 res += "----------------------------\n"
         bot.edit_message_text(res, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
 
