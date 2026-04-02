@@ -25,7 +25,9 @@ from herramientas import (
 )
 
 import http.server, socketserver, threading
+from flask import Flask, request, jsonify
 
+# ─── Health server (Koyeb) ────────────────────────────────────────────────────
 def run_health_server():
     PORT = 8000
     Handler = http.server.SimpleHTTPRequestHandler
@@ -35,6 +37,179 @@ def run_health_server():
         httpd.serve_forever()
 
 threading.Thread(target=run_health_server, daemon=True).start()
+
+# ─── Estados conversacionales WhatsApp ───────────────────────────────────────
+# Estructura: { "549XXXXXXXX@s.whatsapp.net": {"modo": "normal"|"horarios"|"ia"} }
+estados_wa = {}
+
+# Menú principal en texto plano (WhatsApp no tiene botones inline)
+MENU_WA = (
+    "👋 *Hola! Soy el Bot TUCE* 🎓\n"
+    "Tu asistente de la Tecnicatura en Comercio Electrónico - UNPAZ\n\n"
+    "Escribí el número de lo que necesitás:\n\n"
+    "1️⃣ 📚 Horarios de materias\n"
+    "2️⃣ 🗓️ Calendario académico\n"
+    "3️⃣ 📍 Sedes UNPAZ\n"
+    "4️⃣ 📄 Plan de estudios\n"
+    "5️⃣ 🔗 Correlativas de una materia\n"
+    "6️⃣ 💬 Consultar a la IA\n\n"
+    "_Escribí *menu* en cualquier momento para volver acá._"
+)
+
+def procesar_mensaje_wa(from_id: str, text: str) -> str:
+    """
+    Procesa un mensaje de WhatsApp y devuelve la respuesta en texto plano.
+    Maneja el estado conversacional del usuario.
+    """
+    texto = text.strip().lower()
+    estado = estados_wa.get(from_id, {})
+
+    # Comandos globales que siempre funcionan
+    if texto in ("menu", "inicio", "start", "hola", "buenas", "hey", "0"):
+        estados_wa.pop(from_id, None)
+        return MENU_WA
+
+    # ── Flujo: esperando nombre de materia para horarios ──────────────────────
+    if estado.get("modo") == "horarios":
+        estados_wa.pop(from_id, None)
+        # Buscar coincidencia parcial en LISTA_HORARIOS
+        resultados = [f for f in LISTA_HORARIOS if texto in f[0].lower()]
+        if not resultados:
+            # Intentar con cualquier palabra
+            for palabra in texto.split():
+                resultados = [f for f in LISTA_HORARIOS if palabra in f[0].lower()]
+                if resultados:
+                    break
+        if not resultados:
+            return (
+                f"❌ No encontré horarios para *{text}*.\n\n"
+                "Escribí *horarios* para ver la lista completa, o *menu* para volver."
+            )
+        materia_encontrada = resultados[0][0]
+        cor = correlativas_de(materia_encontrada)
+        resp = f"📍 *{materia_encontrada}*\n"
+        if cor:
+            resp += f"_{cor}_\n"
+        resp += "\n"
+        for f in LISTA_HORARIOS:
+            if f[0] == materia_encontrada:
+                resp += f"👥 Com {f[1]} | 🗓 {f[2]} | ⏰ {f[3][:-3]} a {f[4][:-3]} hs\n"
+                resp += f"🏢 Aula: {f[8]} | 💻 {f[5]}\n"
+                resp += "──────────────\n"
+        resp += "\n_Escribí *menu* para volver._"
+        return resp
+
+    # ── Flujo: esperando nombre de materia para correlativas ──────────────────
+    if estado.get("modo") == "correlativas":
+        estados_wa.pop(from_id, None)
+        # Buscar por nombre parcial en CORRELATIVAS
+        encontrada = None
+        for info in CORRELATIVAS.values():
+            if texto in info["nombre"].lower():
+                encontrada = info
+                break
+        if not encontrada:
+            return (
+                f"❌ No encontré *{text}* en el plan.\n"
+                "Revisá el nombre y probá de nuevo, o escribí *menu*."
+            )
+        nombre = encontrada["nombre"]
+        if not encontrada["necesita"]:
+            return f"✅ *{nombre}*\n\nNo tiene correlativas. ¡Podés cursarla cuando quieras!"
+        previas = "\n".join(
+            f"  • {CORRELATIVAS[c]['nombre']}" for c in encontrada["necesita"]
+        )
+        return (
+            f"🔗 *{nombre}*\n\n"
+            f"Para cursarla necesitás tener aprobada/s:\n{previas}\n\n"
+            "_Escribí *menu* para volver._"
+        )
+
+    # ── Flujo: modo IA activo ─────────────────────────────────────────────────
+    if estado.get("modo") == "ia":
+        return responder_ia(text) + "\n\n_Escribí *menu* para volver al menú._"
+
+    # ── Opciones del menú principal ───────────────────────────────────────────
+    if texto in ("1", "horarios"):
+        materias = sorted(list(set(f[0] for f in LISTA_HORARIOS)))
+        lista = "\n".join(f"  • {m}" for m in materias)
+        estados_wa[from_id] = {"modo": "horarios"}
+        return (
+            f"📚 *Horarios de materias*\n\n"
+            f"Materias disponibles:\n{lista}\n\n"
+            "✏️ *Escribí el nombre (o parte) de la materia que querés ver:*"
+        )
+
+    if texto in ("2", "calendario"):
+        resp = "🗓 *Calendario Académico 2026*\n\n"
+        for k, v in DATA_CALENDARIO.items():
+            resp += v.replace("*", "") + "\n\n"
+        resp += "_Escribí *menu* para volver._"
+        return resp
+
+    if texto in ("3", "sedes"):
+        return (
+            "📍 *Sedes UNPAZ*\n\n"
+            "🏢 *Sede Alem*\n"
+            "Av. Alem 4731, José C. Paz\n"
+            "📌 google.com/maps?q=-34.5164,-58.7615\n\n"
+            "🏢 *Sede Arregui*\n"
+            "Arregui 2080, José C. Paz\n"
+            "📌 google.com/maps?q=-34.5208,-58.7758\n\n"
+            "_Escribí *menu* para volver._"
+        )
+
+    if texto in ("4", "plan"):
+        resp = "📄 *Plan de Estudios TUCE*\n\n"
+        for anio, materias in DATA_PLAN.items():
+            resp += f"*{anio}:*\n"
+            for m in materias:
+                resp += f"  • {m}\n"
+            resp += "\n"
+        resp += "_Escribí *menu* para volver._"
+        return resp
+
+    if texto in ("5", "correlativas"):
+        estados_wa[from_id] = {"modo": "correlativas"}
+        return (
+            "🔗 *Correlativas*\n\n"
+            "Escribí el nombre (o parte) de la materia para ver qué necesitás:\n\n"
+            "_Ejemplo: 'desarrollo web', 'marketing', 'inglés'_"
+        )
+
+    if texto in ("6", "ia", "consultar"):
+        estados_wa[from_id] = {"modo": "ia"}
+        return (
+            "💬 *Modo IA activado*\n\n"
+            "Preguntame lo que necesites sobre la carrera, trámites, becas o UNPAZ.\n"
+            "_Escribí *menu* cuando quieras volver al menú._"
+        )
+
+    # ── Respuesta IA por defecto ──────────────────────────────────────────────
+    return responder_ia(text) + "\n\n_Escribí *menu* para ver las opciones._"
+
+
+# ─── Webhook Flask para el bridge de WhatsApp ────────────────────────────────
+flask_app = Flask(__name__)
+
+@flask_app.route("/wa", methods=["POST"])
+def webhook_wa():
+    data     = request.get_json(silent=True) or {}
+    from_id  = data.get("from", "")
+    message  = data.get("message", "").strip()
+    if not from_id or not message:
+        return jsonify({"response": ""}), 400
+    respuesta = procesar_mensaje_wa(from_id, message)
+    return jsonify({"response": respuesta})
+
+@flask_app.route("/health", methods=["GET"])
+def health():
+    return "OK", 200
+
+def run_flask():
+    flask_app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+
+threading.Thread(target=run_flask, daemon=True).start()
 
 base_dir = os.path.dirname(__file__)
 load_dotenv(os.path.join(base_dir, '.env'))
@@ -67,10 +242,74 @@ DATA_CALENDARIO = {
     "Verano 2027":      "☀️ *VERANO 2027:*\n🔹 Cursada: Febrero 2027"
 }
 DATA_PLAN = {
-    "Primer Año":  ["Tecnología y Sociedad (4hs)", "Inglés I (4hs)", "Principios de Economía (4hs)", "Comunicación Institucional (4hs)", "Internet: Infraestructura y redes (4hs)", "Semántica de las interfaces (4hs)", "Introducción al comercio electrónico (4hs)", "Usabilidad, seguridad y Estándares Web (4hs)", "Inglés II (4hs)"],
-    "Segundo Año": ["Investigación de mercado (4hs)", "Marco legal (4hs)", "Gestión del conocimiento (4hs)", "Desarrollo Web (4hs)", "Proyectos (4hs)", "Métricas (4hs)", "Productos y Servicios (4hs)", "Taller de Comunicación (4hs)", "Dispositivos móviles (4hs)"],
-    "Tercer Año":  ["Calidad y Servicio al Cliente (4hs)", "Marketing digital (4hs)", "Taller de Práctica Integradora (4hs)", "Competencias emprendedoras (4hs)", "Gestión de Proyectos (4hs)"]
+    "Primer Año": [
+        "Tecnología y Sociedad (4hs)",
+        "Inglés I (4hs)",
+        "Principios de Economía (4hs)",
+        "Comunicación Institucional (4hs)",
+        "Internet: Infraestructura y redes (4hs)",
+        "Semántica de las interfaces (4hs)",
+        "Introducción al comercio electrónico (4hs)",
+        "Usabilidad, seguridad y Estándares Web (4hs)",
+        "Inglés II (4hs)",
+    ],
+    "Segundo Año": [
+        "Investigación de mercado (4hs)",
+        "Marco legal de negocios electrónicos (4hs)",
+        "Gestión del conocimiento (4hs)",
+        "Desarrollo Web (4hs)",
+        "Formulación, incubación y evaluación de proyectos (4hs)",
+        "Métricas del mundo digital (4hs)",
+        "Desarrollo de Productos y Servicios (4hs)",
+        "Taller de Comunicación (4hs)",
+        "Desarrollos para Dispositivos móviles (4hs)",
+    ],
+    "Tercer Año": [
+        "Calidad y Servicio al Cliente (4hs)",
+        "Marketing digital (4hs)",
+        "Taller de Práctica Integradora (4hs)",
+        "Competencias emprendedoras (4hs)",
+        "Gestión de Proyectos (4hs)",
+    ],
 }
+
+# Correlativas según el plan de estudios oficial (PDF UNPAZ)
+CORRELATIVAS = {
+    "01": {"nombre": "Tecnología y Sociedad",                              "necesita": []},
+    "02": {"nombre": "Inglés I",                                           "necesita": []},
+    "03": {"nombre": "Principios de Economía",                             "necesita": []},
+    "04": {"nombre": "Comunicación Institucional",                         "necesita": []},
+    "05": {"nombre": "Internet: Infraestructura y redes",                  "necesita": []},
+    "06": {"nombre": "Semántica de las interfaces",                        "necesita": []},
+    "07": {"nombre": "Introducción al comercio electrónico",               "necesita": []},
+    "08": {"nombre": "Usabilidad, seguridad y Estándares Web",             "necesita": ["05"]},
+    "09": {"nombre": "Inglés II",                                          "necesita": ["02"]},
+    "10": {"nombre": "Investigación de mercado",                           "necesita": ["03", "07"]},
+    "11": {"nombre": "Marco legal de negocios electrónicos",               "necesita": ["07"]},
+    "12": {"nombre": "Gestión del conocimiento",                           "necesita": ["01"]},
+    "13": {"nombre": "Desarrollo Web",                                     "necesita": ["06", "08"]},
+    "14": {"nombre": "Formulación, incubación y evaluación de proyectos",  "necesita": ["03"]},
+    "15": {"nombre": "Métricas del mundo digital",                         "necesita": []},
+    "16": {"nombre": "Desarrollo de Productos y Servicios",                "necesita": ["10"]},
+    "17": {"nombre": "Taller de Comunicación",                             "necesita": ["04"]},
+    "18": {"nombre": "Desarrollos para Dispositivos móviles",              "necesita": ["13"]},
+    "19": {"nombre": "Calidad y Servicio al Cliente",                      "necesita": ["16"]},
+    "20": {"nombre": "Marketing digital",                                  "necesita": ["17"]},
+    "21": {"nombre": "Taller de Práctica Integradora",                     "necesita": ["16", "17"]},
+    "22": {"nombre": "Competencias emprendedoras",                         "necesita": ["14"]},
+    "23": {"nombre": "Gestión de Proyectos",                               "necesita": ["07", "14"]},
+}
+
+def correlativas_de(nombre_materia: str) -> str:
+    """Devuelve texto con las correlativas de una materia, buscando por nombre."""
+    nombre_lower = nombre_materia.lower()
+    for info in CORRELATIVAS.values():
+        if info["nombre"].lower() == nombre_lower:
+            if not info["necesita"]:
+                return "✅ Sin correlativas"
+            previas = " + ".join(CORRELATIVAS[c]["nombre"] for c in info["necesita"])
+            return f"🔗 Requiere: {previas}"
+    return ""
 DATA_BOT_INFO = {
     "bot_equivalencias": "⚖️ *Equivalencias:* Trámite formal del 01/04 al 10/04/2026.",
     "bot_boleto":        "🚌 *Boleto Estudiantil:* Gestión vía SIU Guaraní para alumnos regulares.",
@@ -206,6 +445,15 @@ def manejar_mensajes(message):
 
     txt = message.text
 
+    # Limpiar estados activos si el usuario navega al menú principal
+    BOTONES_MENU = {
+        "📚 Materias horarios", "🗓️ Calendario", "📍 Sedes",
+        "🖥️ Gestión Alumnos", "🤖 Bot TUCE", "🌟 Talentos TUCE", "🛠️ Herramientas",
+    }
+    if txt in BOTONES_MENU:
+        estados_herramientas.pop(user_id, None)
+        estados_talentos.pop(user_id, None)
+
     if txt == "📚 Materias horarios":
         materias = sorted(list(set([f[0] for f in LISTA_HORARIOS])))
         markup = types.InlineKeyboardMarkup(row_width=1)
@@ -289,6 +537,7 @@ def callback_global(call):
 
     # ── Herramientas ──
     if d == "her_menu":
+        estados_herramientas.pop(call.from_user.id, None)
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
             types.InlineKeyboardButton("📂 Banco de material", callback_data="her_banco"),
@@ -302,11 +551,13 @@ def callback_global(call):
         return
 
     if d == "her_menu_msg":
+        estados_herramientas.pop(call.from_user.id, None)
         bot.answer_callback_query(call.id)
         menu_herramientas(bot, call.message)
         return
 
     if d == "her_banco":
+        estados_herramientas.pop(call.from_user.id, None)
         menu_banco(bot, call)
         return
 
@@ -412,12 +663,51 @@ def callback_global(call):
 
     # ── Calendario ──
     if d.startswith("cal_"):
-        bot.edit_message_text(DATA_CALENDARIO[d.replace("cal_","")],
-                              call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("⬅️ Volver al Calendario", callback_data="cal_volver"))
+        bot.edit_message_text(
+            DATA_CALENDARIO[d.replace("cal_","")],
+            call.message.chat.id, call.message.message_id,
+            reply_markup=markup, parse_mode="Markdown"
+        )
+
+    elif d == "cal_volver":
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            types.InlineKeyboardButton("📝 Ingresantes",   callback_data="cal_Ingresantes"),
+            types.InlineKeyboardButton("1️⃣ 1er Semestre", callback_data="cal_Primer Semestre"),
+            types.InlineKeyboardButton("2️⃣ 2do Semestre", callback_data="cal_Segundo Semestre"),
+            types.InlineKeyboardButton("☀️ Verano 2027",  callback_data="cal_Verano 2027"),
+        )
+        bot.edit_message_text(
+            "🗓️ *Calendario Académico:*",
+            call.message.chat.id, call.message.message_id,
+            reply_markup=markup, parse_mode="Markdown"
+        )
 
     elif d.startswith("bot_"):
-        bot.edit_message_text(DATA_BOT_INFO[d],
-                              call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("⬅️ Volver", callback_data="bot_volver"))
+        bot.edit_message_text(
+            DATA_BOT_INFO[d],
+            call.message.chat.id, call.message.message_id,
+            reply_markup=markup, parse_mode="Markdown"
+        )
+
+    elif d == "bot_volver":
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("⚖️ Equivalencias",      callback_data="bot_equivalencias"),
+            types.InlineKeyboardButton("🚌 Boleto Estudiantil", callback_data="bot_boleto"),
+            types.InlineKeyboardButton("📄 Certificados",       callback_data="bot_certificados"),
+            types.InlineKeyboardButton("✍️ Inscripción",        callback_data="bot_inscripcion"),
+            types.InlineKeyboardButton("💬 Consultar a la IA",  callback_data="ia_modo"),
+        )
+        bot.edit_message_text(
+            "🤖 *Centro de Asistencia Bot TUCE*",
+            call.message.chat.id, call.message.message_id,
+            reply_markup=markup, parse_mode="Markdown"
+        )
 
     elif d == "ver_contactos":
         markup = types.InlineKeyboardMarkup(row_width=1)
@@ -464,18 +754,48 @@ def callback_global(call):
 
     elif d.startswith("anio_"):
         anio = d.replace("anio_","")
-        bot.edit_message_text(f"📚 *Asignaturas {anio}:*\n" + "\n".join(DATA_PLAN[anio]),
-                              call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        lineas = []
+        for materia in DATA_PLAN[anio]:
+            nombre = materia.replace(" (4hs)", "")
+            cor = correlativas_de(nombre)
+            if cor and "Sin correlativas" not in cor:
+                lineas.append(f"• {materia}\n  _{cor}_")
+            else:
+                lineas.append(f"• {materia}")
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("⬅️ Volver al Plan", callback_data="plan_info"))
+        bot.edit_message_text(
+            f"📚 *Asignaturas {anio}:*\n\n" + "\n".join(lineas),
+            call.message.chat.id, call.message.message_id,
+            reply_markup=markup, parse_mode="Markdown"
+        )
+
+    elif d == "ver_lista_materias":
+        materias = sorted(list(set([f[0] for f in LISTA_HORARIOS])))
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        for mat in materias:
+            markup.add(types.InlineKeyboardButton(mat, callback_data=f"hor_{mat}"))
+        bot.edit_message_text(
+            "📚 *Seleccione asignatura:*",
+            call.message.chat.id, call.message.message_id,
+            reply_markup=markup, parse_mode="Markdown"
+        )
 
     elif d.startswith("hor_"):
         mat_sel = d.replace("hor_","")
-        res = f"📍 *Horarios: {mat_sel}*\n\n"
+        cor = correlativas_de(mat_sel)
+        res = f"📍 *{mat_sel}*\n"
+        if cor:
+            res += f"_{cor}_\n"
+        res += "\n"
         for f in LISTA_HORARIOS:
             if f[0] == mat_sel:
                 res += f"👥 *Com {f[1]}* | 🗓️ {f[2]} | ⏰ {f[3][:-3]} a {f[4][:-3]} hs.\n"
                 res += f"🏢 *Aula:* {f[8]}\n💻 *Mod:* {f[5]}\n"
                 res += "----------------------------\n"
-        bot.edit_message_text(res, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("⬅️ Volver a Materias", callback_data="ver_lista_materias"))
+        bot.edit_message_text(res, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
     elif d == "sede_alem":
         bot.send_location(call.message.chat.id, -34.5164, -58.7615)

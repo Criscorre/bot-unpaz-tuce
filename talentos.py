@@ -31,6 +31,7 @@ CATEGORIAS = [
     "📊 Analista Digital",
     "🛒 E-commerce Manager",
     "🏢 Agencias TUCE",
+    "✨ Otros",
 ]
 
 PASOS_PREGUNTAS = {
@@ -218,8 +219,13 @@ def mostrar_perfil_individual(bot, call, tid):
             markup.add(*(types.InlineKeyboardButton(f"{i}⭐", callback_data=f"tal_votar_{tid}_{i}") for i in range(1,6)))
         else:
             markup.add(types.InlineKeyboardButton("✅ Ya calificaste", callback_data="tal_noop"))
-    
-    # Botón Volver Dinámico
+    else:
+        # El dueño puede editar o eliminar su propio perfil
+        markup.add(
+            types.InlineKeyboardButton("✏️ Editar perfil",   callback_data=f"tal_editar_{tid}"),
+            types.InlineKeyboardButton("🗑️ Eliminar perfil", callback_data=f"tal_eliminar_{tid}"),
+        )
+
     cat_talento = t.get('categoria', '')
     markup.add(types.InlineKeyboardButton("⬅️ Volver a la lista", callback_data=f"tal_ver_{cat_talento}"))
     markup.add(types.InlineKeyboardButton("🏠 Menú Principal", callback_data="tal_menu_principal"))
@@ -254,6 +260,57 @@ def mostrar_destacados(bot, call):
     markup.add(types.InlineKeyboardButton("⬅️ Volver", callback_data="tal_menu_principal"))
     bot.edit_message_text(res, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
-def iniciar_edicion(bot, call, tid): pass
-def confirmar_eliminacion(bot, call, tid): pass
-def ejecutar_eliminacion(bot, call, tid): pass
+def iniciar_edicion(bot, call, tid):
+    """Reinicia el flujo de registro para que el usuario pueda editar su perfil."""
+    uid = call.from_user.id
+    if str(uid) != str(tid):
+        bot.answer_callback_query(call.id, "⚠️ Solo podés editar tu propio perfil.")
+        return
+    bot.answer_callback_query(call.id)
+    estados_talentos[uid] = {"paso": "categoria", "datos": {"telegram_id": uid}}
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    for cat in CATEGORIAS:
+        markup.add(types.InlineKeyboardButton(cat, callback_data=f"tal_cat_{cat}"))
+    bot.send_message(
+        call.message.chat.id,
+        "✏️ *Editando tu perfil* — Los datos anteriores serán reemplazados.\n\n"
+        "🏷️ *Paso 1/7 — Categoría*",
+        reply_markup=markup,
+        parse_mode="Markdown"
+    )
+
+def confirmar_eliminacion(bot, call, tid):
+    """Muestra confirmación antes de eliminar el perfil."""
+    uid = call.from_user.id
+    if str(uid) != str(tid):
+        bot.answer_callback_query(call.id, "⚠️ Solo podés eliminar tu propio perfil.")
+        return
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("✅ Sí, eliminar",  callback_data=f"tal_confirm_del_{tid}"),
+        types.InlineKeyboardButton("❌ Cancelar",       callback_data=f"tal_perfil_{tid}"),
+    )
+    bot.edit_message_text(
+        "⚠️ *¿Seguro que querés eliminar tu perfil?*\n\nEsta acción no se puede deshacer.",
+        call.message.chat.id, call.message.message_id,
+        reply_markup=markup, parse_mode="Markdown"
+    )
+
+def ejecutar_eliminacion(bot, call, tid):
+    """Elimina el perfil de Firebase."""
+    uid = call.from_user.id
+    if str(uid) != str(tid):
+        bot.answer_callback_query(call.id, "⚠️ Solo podés eliminar tu propio perfil.")
+        return
+    try:
+        db.reference('talentos').child(str(tid)).delete()
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🏠 Volver al Menú", callback_data="tal_menu_principal"))
+        bot.edit_message_text(
+            "🗑️ *Perfil eliminado correctamente.*\n\nPodés volver a publicarlo cuando quieras.",
+            call.message.chat.id, call.message.message_id,
+            reply_markup=markup, parse_mode="Markdown"
+        )
+    except Exception as e:
+        print(f"❌ Error eliminando perfil: {e}")
+        bot.answer_callback_query(call.id, "⚠️ Error al eliminar. Intentá de nuevo.")
