@@ -5,3 +5,4 @@ requests==2.32.5
 firebase-admin
 python-docx
 fpdf2
+flask>=3.0.0

@@ -1,0 +1,17 @@
+{
+  "name": "bot-tuce-whatsapp",
+  "version": "1.0.0",
+  "description": "Bridge WhatsApp para Bot TUCE - Bytes Creativos",
+  "main": "whatsapp_bridge.js",
+  "scripts": {
+    "start": "node whatsapp_bridge.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "axios": "^1.7.9",
+    "pino": "^9.5.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -14,22 +14,28 @@ estados_herramientas = {}
 
 # Materias disponibles para el banco
 MATERIAS_BANCO = [
-    "Tecnología y sociedad",
-    "Inglés I / II",
+    # 1° Año
+    "Tecnología y Sociedad",
+    "Inglés I",
+    "Inglés II",
     "Principios de Economía",
     "Comunicación Institucional",
     "Internet: Infraestructura y redes",
     "Semántica de las interfaces",
     "Introducción al comercio electrónico",
     "Usabilidad, seguridad y Estándares Web",
+    # 2° Año
     "Investigación de mercado",
     "Marco legal de negocios electrónicos",
     "Gestión del conocimiento",
     "Desarrollo Web",
-    "Formulación y evaluación de proyectos",
+    "Formulación, incubación y evaluación de proyectos",
     "Métricas del mundo digital",
     "Desarrollo de Productos y Servicios",
-    "Dispositivos móviles",
+    "Taller de Comunicación",
+    "Desarrollos para Dispositivos móviles",
+    # 3° Año
+    "Calidad y Servicio al Cliente",
     "Marketing digital",
     "Taller de Práctica Integradora",
     "Competencias emprendedoras",
@@ -125,11 +131,14 @@ def paso_tipo_subir(bot, call, tipo):
     estados_herramientas[user_id]["tipo"] = tipo
     estados_herramientas[user_id]["paso"] = "archivo_subir"
 
+    markup_cancel = types.InlineKeyboardMarkup()
+    markup_cancel.add(types.InlineKeyboardButton("❌ Cancelar", callback_data="her_banco"))
     bot.edit_message_text(
         f"✅ Tipo: *{tipo}*\n\n"
         f"📎 *Ahora enviá el archivo* (PDF, foto, Word o imagen)\n\n"
         f"_Máximo 20MB_",
         call.message.chat.id, call.message.message_id,
+        reply_markup=markup_cancel,
         parse_mode="Markdown"
     )
 
@@ -291,11 +300,14 @@ def menu_ocr(bot, call):
     user_id = call.from_user.id
     estados_herramientas[user_id] = {"paso": "esperando_foto_ocr"}
     bot.answer_callback_query(call.id)
+    markup_cancel = types.InlineKeyboardMarkup()
+    markup_cancel.add(types.InlineKeyboardButton("❌ Cancelar", callback_data="her_menu"))
     bot.edit_message_text(
         "📸 *Foto → Word / PDF*\n\n"
         "Sacá una foto a tu apunte o al pizarrón y yo lo convierto en un documento.\n\n"
         "📎 *Enviame la foto ahora:*",
         call.message.chat.id, call.message.message_id,
+        reply_markup=markup_cancel,
         parse_mode="Markdown"
     )
 
