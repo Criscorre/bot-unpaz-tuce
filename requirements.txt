@@ -6,3 +6,5 @@ firebase-admin
 python-docx
 fpdf2
 flask>=3.0.0
+beautifulsoup4>=4.12.0
+apscheduler>=3.10.0
