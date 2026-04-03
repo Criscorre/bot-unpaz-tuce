@@ -163,10 +163,10 @@ def procesar_mensaje_wa(from_id: str, text: str) -> str:
             "📍 *Sedes UNPAZ*\n\n"
             "🏢 *Sede Alem*\n"
             "Av. Alem 4731, José C. Paz\n"
-            "📌 google.com/maps?q=-34.5164,-58.7615\n\n"
+            "📌 https://maps.google.com/?q=-34.5164,-58.7615\n\n"
             "🏢 *Sede Arregui*\n"
             "Arregui 2080, José C. Paz\n"
-            "📌 google.com/maps?q=-34.5208,-58.7758\n\n"
+            "📌 https://maps.google.com/?q=-34.5208,-58.7758\n\n"
             "_Escribí *menu* para volver._"
         )
 
