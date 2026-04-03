@@ -1,10 +1,5 @@
-FROM python:3.11-slim
-
-# Instalar Node.js 20 junto con Python
-RUN apt-get update && apt-get install -y curl && \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+# Imagen oficial que ya incluye Python 3.11 + Node.js 20 — sin instalación manual
+FROM nikolaik/python-nodejs:python3.11-nodejs20
 
 WORKDIR /app
 
