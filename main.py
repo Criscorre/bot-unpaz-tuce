@@ -7,7 +7,7 @@ import requests
 from openai import OpenAI
 from info_unpaz import DATOS_TECNICATURA
 from materias_db import LISTA_HORARIOS
-from scraper import scrape_todo, obtener_contexto_ia, obtener_novedades_texto
+from scraper import scrape_todo, obtener_contexto_ia, obtener_novedades_texto, leer_cache
 from talentos import (
     menu_talentos, iniciar_registro, mostrar_menu_explorar,
     mostrar_talentos_por_categoria, mostrar_perfil_individual,
@@ -23,6 +23,12 @@ from herramientas import (
     mostrar_material_materia, descargar_archivo,
     procesar_foto_ocr, generar_documento,
     estados_herramientas,
+)
+from horario_personal import (
+    menu_horario, iniciar_config, seleccionar_comision,
+    saltear_materia, finalizar_config, confirmar_borrar,
+    ejecutar_borrar, cancelar_config,
+    estados_horario,
 )
 
 import http.server, socketserver, threading
@@ -56,7 +62,8 @@ MENU_WA = (
     "6️⃣ 💬 Consultar a la IA\n"
     "7️⃣ 📰 Novedades UNPAZ\n"
     "8️⃣ 🖥️ Gestión Alumnos\n"
-    "9️⃣ 📩 Contactos y Mesa de Ayuda\n\n"
+    "9️⃣ 📩 Contactos y Mesa de Ayuda\n"
+    "🔟 📅 Mi Horario Personal\n\n"
     "_Escribí *menu* en cualquier momento para volver acá._"
 )
 
@@ -221,6 +228,16 @@ def procesar_mensaje_wa(from_id: str, text: str) -> str:
             "_Escribí *menu* para volver._"
         )
 
+    if texto in ("10", "horario", "mi horario"):
+        from horario_personal import cargar_horario_db, formatear_horario
+        sel = cargar_horario_db(firebase_db, from_id)
+        texto_horario = formatear_horario(sel)
+        return (
+            texto_horario + "\n\n"
+            "💡 _Para configurar o editar tu horario personal, abrí el bot de Telegram._\n\n"
+            "_Escribí *menu* para volver._"
+        )
+
     # ── Respuesta IA por defecto ──────────────────────────────────────────────
     return responder_ia(text) + "\n\n_Escribí *menu* para ver las opciones._"
 
@@ -283,6 +300,61 @@ def _iniciar_scraper():
 
 scheduler = BackgroundScheduler(daemon=True)
 scheduler.add_job(_iniciar_scraper, "interval", hours=6, id="scraper_unpaz")
+
+# ─── Recordatorios automáticos ────────────────────────────────────────────────
+# Fechas clave del calendario académico 2026 que se notifican 48hs antes
+FECHAS_RECORDATORIOS = {
+    "2026-02-16": "📝 Pasado mañana arranca la inscripción al 1er semestre (18/02).",
+    "2026-02-17": "📝 Mañana arranca la inscripción al 1er semestre (18/02). ¡Preparate!",
+    "2026-03-07": "📚 Pasado mañana empiezan las clases del 1er semestre (09/03).",
+    "2026-03-08": "📚 ¡Mañana empiezan las clases! 1er semestre 2026. ¡Buena cursada!",
+    "2026-07-20": "📝 Pasado mañana arranca la inscripción al 2do semestre (22/07).",
+    "2026-07-21": "📝 Mañana arranca la inscripción al 2do semestre (22/07). ¡Preparate!",
+    "2026-08-08": "📚 Pasado mañana empiezan las clases del 2do semestre (10/08).",
+    "2026-08-09": "📚 ¡Mañana empiezan las clases! 2do semestre 2026. ¡Buena cursada!",
+    "2026-04-08": "⚖️ Pasado mañana vence el período de equivalencias (10/04/2026).",
+    "2026-04-09": "⚖️ ¡Mañana es el último día para tramitar equivalencias (10/04)! Ingresá al SIU.",
+}
+
+import datetime
+
+def _enviar_recordatorios():
+    """Se ejecuta todos los días a las 11:00 UTC (08:00 Argentina).
+       Busca si hoy hay recordatorio y lo envía a todos los usuarios registrados."""
+    try:
+        hoy = datetime.date.today().strftime("%Y-%m-%d")
+        mensaje = FECHAS_RECORDATORIOS.get(hoy)
+        if not mensaje:
+            return
+        # Verificar si ya se envió hoy para evitar duplicados
+        key_enviado = f"recordatorios_enviados/{hoy}"
+        ya_enviado = firebase_db.reference(key_enviado).get()
+        if ya_enviado:
+            return
+        # Obtener todos los usuarios registrados
+        usuarios = firebase_db.reference("usuarios_telegram").get() or {}
+        enviados = 0
+        for uid, info in usuarios.items():
+            try:
+                chat_id = info.get("chat_id") if isinstance(info, dict) else None
+                if not chat_id:
+                    continue
+                bot.send_message(
+                    chat_id,
+                    f"🔔 *Recordatorio TUCE*\n\n{mensaje}\n\n"
+                    "_Podés ver más info con /start → 🗓️ Calendario_",
+                    parse_mode="Markdown"
+                )
+                enviados += 1
+            except Exception as ex:
+                print(f"⚠️ No se pudo notificar a {uid}: {ex}")
+        # Marcar como enviado
+        firebase_db.reference(key_enviado).set(True)
+        print(f"🔔 Recordatorios enviados a {enviados} usuarios para {hoy}")
+    except Exception as e:
+        print(f"❌ Error en recordatorios: {e}")
+
+scheduler.add_job(_enviar_recordatorios, "cron", hour=11, minute=0, id="recordatorios")
 scheduler.start()
 # Primer scraping en background al iniciar (no bloquea el arranque del bot)
 threading.Thread(target=_iniciar_scraper, daemon=True).start()
@@ -420,8 +492,27 @@ def registrar_usuario(user):
             })
         except: pass
 
+def _cache_fresco() -> bool:
+    """Devuelve True si el cache de scraping tiene menos de 12 horas."""
+    try:
+        cache = leer_cache(firebase_db)
+        if not cache:
+            return False
+        ts_str = cache.get("inicio", {}).get("timestamp", "")
+        if not ts_str:
+            return False
+        ts = datetime.datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+        diferencia = datetime.datetime.now() - ts
+        return diferencia.total_seconds() < 12 * 3600
+    except Exception:
+        return False
+
 def responder_ia(pregunta):
     ctx = f"{DATOS_TECNICATURA}\nCALENDARIO: {DATA_CALENDARIO}\nPLAN: {DATA_PLAN}\n"
+
+    # Scraping on-demand: si el cache tiene más de 12 horas, actualizar en background
+    if not _cache_fresco():
+        threading.Thread(target=_iniciar_scraper, daemon=True).start()
 
     # Contexto scrapeado desde Firebase (se actualiza cada 6 horas)
     try:
@@ -466,12 +557,23 @@ def responder_ia(pregunta):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     registrar_usuario(message.from_user)
+    # Guardar usuario en Firebase para recordatorios automáticos
+    try:
+        firebase_db.reference(f"usuarios_telegram/{message.from_user.id}").set({
+            "nombre":   message.from_user.first_name or "",
+            "username": message.from_user.username or "",
+            "chat_id":  message.chat.id,
+        })
+    except Exception as e:
+        print(f"⚠️ Error registrando usuario en Firebase: {e}")
+
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add(
         "📚 Materias horarios", "🗓️ Calendario",
         "📍 Sedes",             "🖥️ Gestión Alumnos",
         "🤖 Bot TUCE",          "🌟 Talentos TUCE",
         "🛠️ Herramientas",      "📰 Novedades UNPAZ",
+        "📅 Mi Horario",
     )
     bot.send_message(
         message.chat.id,
@@ -510,6 +612,7 @@ def manejar_mensajes(message):
     BOTONES_MENU = {
         "📚 Materias horarios", "🗓️ Calendario", "📍 Sedes",
         "🖥️ Gestión Alumnos", "🤖 Bot TUCE", "🌟 Talentos TUCE", "🛠️ Herramientas",
+        "📰 Novedades UNPAZ", "📅 Mi Horario",
     }
     if txt in BOTONES_MENU:
         estados_herramientas.pop(user_id, None)
@@ -557,6 +660,7 @@ def manejar_mensajes(message):
             types.InlineKeyboardButton("🎓 Campus Virtual",            url="https://campusvirtual.unpaz.edu.ar/"),
             types.InlineKeyboardButton("🖥️ SIU Guaraní",              url="https://estudiantes.unpaz.edu.ar/autogestion/"),
             types.InlineKeyboardButton("📄 Plan de Estudios",          callback_data="plan_info"),
+            types.InlineKeyboardButton("📅 Mi Horario Personal",       callback_data="hp_ver"),
             types.InlineKeyboardButton("📩 Contactos y Mesa de Ayuda", callback_data="ver_contactos"),
         )
         bot.send_message(message.chat.id, "🚀 *Gestión Alumnos:*", reply_markup=markup, parse_mode="Markdown")
@@ -576,6 +680,9 @@ def manejar_mensajes(message):
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("🔗 Ver en unpaz.edu.ar", url="https://www.unpaz.edu.ar/noticias"))
         bot.send_message(message.chat.id, texto, reply_markup=markup, parse_mode="Markdown")
+
+    elif txt == "📅 Mi Horario":
+        menu_horario(bot, message, firebase_db, editar=False)
 
     else:
         FIJAS = {
@@ -730,6 +837,40 @@ def callback_global(call):
 
     if d.startswith("tal_confirm_del_"):
         ejecutar_eliminacion(bot, call, d.replace("tal_confirm_del_",""))
+        return
+
+    # ── Horario Personal ──
+    if d == "hp_ver":
+        menu_horario(bot, call, firebase_db, editar=True)
+        return
+
+    if d == "hp_cfg":
+        iniciar_config(bot, call, firebase_db)
+        return
+
+    if d == "hp_del_confirm":
+        confirmar_borrar(bot, call)
+        return
+
+    if d == "hp_del_ok":
+        ejecutar_borrar(bot, call, firebase_db)
+        return
+
+    if d == "hp_fin":
+        finalizar_config(bot, call, firebase_db)
+        return
+
+    if d == "hp_cancel":
+        cancelar_config(bot, call, firebase_db)
+        return
+
+    if d.startswith("hp_com_"):
+        partes = d.split("_")  # ["hp", "com", mat_idx, com_idx]
+        seleccionar_comision(bot, call, int(partes[2]), int(partes[3]), firebase_db)
+        return
+
+    if d.startswith("hp_skip_"):
+        saltear_materia(bot, call, int(d.replace("hp_skip_", "")))
         return
 
     # ── Calendario ──
