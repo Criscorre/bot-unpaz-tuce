@@ -15,6 +15,7 @@ const {
 } = require("@whiskeysockets/baileys");
 const axios   = require("axios");
 const pino    = require("pino");
+const qrcode  = require("qrcode-terminal");
 
 const WEBHOOK_URL = process.env.WEBHOOK_URL || "http://localhost:5000/wa";
 const PORT        = process.env.PORT || 3000;
@@ -32,10 +33,9 @@ async function startBot() {
 
     const sock = makeWASocket({
         version,
-        auth:               state,
-        printQRInTerminal:  true,
-        logger:             pino({ level: "silent" }),
-        browser:            ["Bot TUCE", "Chrome", "1.0"],
+        auth:   state,
+        logger: pino({ level: "silent" }),
+        browser: ["Bot TUCE", "Chrome", "1.0"],
     });
 
     // Guardar credenciales cuando cambian
@@ -44,6 +44,8 @@ async function startBot() {
     // Manejo de conexión / desconexión
     sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
         if (qr) {
+            // Dibujar QR en la terminal (compatible con logs de Koyeb)
+            qrcode.generate(qr, { small: true });
             console.log("📱 Escaneá el QR de arriba con tu WhatsApp secundario");
         }
         if (connection === "open") {
