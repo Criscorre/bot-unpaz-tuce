@@ -7,6 +7,7 @@ import requests
 from openai import OpenAI
 from info_unpaz import DATOS_TECNICATURA
 from materias_db import LISTA_HORARIOS
+from scraper import scrape_todo, obtener_contexto_ia, obtener_novedades_texto
 from talentos import (
     menu_talentos, iniciar_registro, mostrar_menu_explorar,
     mostrar_talentos_por_categoria, mostrar_perfil_individual,
@@ -52,7 +53,8 @@ MENU_WA = (
     "3️⃣ 📍 Sedes UNPAZ\n"
     "4️⃣ 📄 Plan de estudios\n"
     "5️⃣ 🔗 Correlativas de una materia\n"
-    "6️⃣ 💬 Consultar a la IA\n\n"
+    "6️⃣ 💬 Consultar a la IA\n"
+    "7️⃣ 📰 Novedades UNPAZ\n\n"
     "_Escribí *menu* en cualquier momento para volver acá._"
 )
 
@@ -185,6 +187,12 @@ def procesar_mensaje_wa(from_id: str, text: str) -> str:
             "_Escribí *menu* cuando quieras volver al menú._"
         )
 
+    if texto in ("7", "novedades"):
+        try:
+            return obtener_novedades_texto(firebase_db) + "\n\n_Escribí *menu* para volver._"
+        except Exception:
+            return "⚠️ No se pudo cargar las novedades. Intentá más tarde.\n\nVisitá: unpaz.edu.ar"
+
     # ── Respuesta IA por defecto ──────────────────────────────────────────────
     return responder_ia(text) + "\n\n_Escribí *menu* para ver las opciones._"
 
@@ -234,6 +242,22 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 # Firebase
 import firebase_admin
 from firebase_admin import db as firebase_db
+
+# ─── Scheduler: scraping automático cada 6 horas ─────────────────────────────
+from apscheduler.schedulers.background import BackgroundScheduler
+
+def _iniciar_scraper():
+    """Lanza el primer scraping y programa los siguientes cada 6 horas."""
+    try:
+        scrape_todo(firebase_db)
+    except Exception as e:
+        print(f"⚠️ Error en scraping inicial: {e}")
+
+scheduler = BackgroundScheduler(daemon=True)
+scheduler.add_job(_iniciar_scraper, "interval", hours=6, id="scraper_unpaz")
+scheduler.start()
+# Primer scraping en background al iniciar (no bloquea el arranque del bot)
+threading.Thread(target=_iniciar_scraper, daemon=True).start()
 
 DATA_CALENDARIO = {
     "Ingresantes":      "📝 *INFO INGRESANTES:*\n🔹 Inscripción CIU: 06/11 al 28/11/2025\n🔹 Desarrollo CIU: 02/02 al 28/02/2026",
@@ -370,6 +394,15 @@ def registrar_usuario(user):
 
 def responder_ia(pregunta):
     ctx = f"{DATOS_TECNICATURA}\nCALENDARIO: {DATA_CALENDARIO}\nPLAN: {DATA_PLAN}\n"
+
+    # Contexto scrapeado desde Firebase (se actualiza cada 6 horas)
+    try:
+        ctx_scraper = obtener_contexto_ia(firebase_db, pregunta)
+        if ctx_scraper:
+            ctx += f"\n\nINFO ACTUALIZADA DE UNPAZ.EDU.AR:\n{ctx_scraper}"
+    except Exception as e:
+        print(f"⚠️ Error leyendo cache scraper: {e}")
+
     ctx_web = ""
     url = detectar_url_relevante(pregunta)
     if url:
@@ -410,7 +443,7 @@ def send_welcome(message):
         "📚 Materias horarios", "🗓️ Calendario",
         "📍 Sedes",             "🖥️ Gestión Alumnos",
         "🤖 Bot TUCE",          "🌟 Talentos TUCE",
-        "🛠️ Herramientas",
+        "🛠️ Herramientas",      "📰 Novedades UNPAZ",
     )
     bot.send_message(
         message.chat.id,
@@ -505,6 +538,16 @@ def manejar_mensajes(message):
 
     elif txt == "🛠️ Herramientas":
         menu_herramientas(bot, message)
+
+    elif txt == "📰 Novedades UNPAZ":
+        bot.send_chat_action(message.chat.id, "typing")
+        try:
+            texto = obtener_novedades_texto(firebase_db)
+        except Exception:
+            texto = "⚠️ No se pudo cargar las novedades. Intentá más tarde."
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🔗 Ver en unpaz.edu.ar", url="https://www.unpaz.edu.ar/noticias"))
+        bot.send_message(message.chat.id, texto, reply_markup=markup, parse_mode="Markdown")
 
     else:
         FIJAS = {
