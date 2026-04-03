@@ -662,16 +662,7 @@ def callback_global(call):
         return
 
     # ── Calendario ──
-    if d.startswith("cal_"):
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("⬅️ Volver al Calendario", callback_data="cal_volver"))
-        bot.edit_message_text(
-            DATA_CALENDARIO[d.replace("cal_","")],
-            call.message.chat.id, call.message.message_id,
-            reply_markup=markup, parse_mode="Markdown"
-        )
-
-    elif d == "cal_volver":
+    if d == "cal_volver":
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(
             types.InlineKeyboardButton("📝 Ingresantes",   callback_data="cal_Ingresantes"),
@@ -685,11 +676,11 @@ def callback_global(call):
             reply_markup=markup, parse_mode="Markdown"
         )
 
-    elif d.startswith("bot_"):
+    elif d.startswith("cal_"):
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("⬅️ Volver", callback_data="bot_volver"))
+        markup.add(types.InlineKeyboardButton("⬅️ Volver al Calendario", callback_data="cal_volver"))
         bot.edit_message_text(
-            DATA_BOT_INFO[d],
+            DATA_CALENDARIO[d.replace("cal_","")],
             call.message.chat.id, call.message.message_id,
             reply_markup=markup, parse_mode="Markdown"
         )
@@ -708,6 +699,16 @@ def callback_global(call):
             call.message.chat.id, call.message.message_id,
             reply_markup=markup, parse_mode="Markdown"
         )
+
+    elif d.startswith("bot_"):
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("⬅️ Volver", callback_data="bot_volver"))
+        bot.edit_message_text(
+            DATA_BOT_INFO[d],
+            call.message.chat.id, call.message.message_id,
+            reply_markup=markup, parse_mode="Markdown"
+        )
+
 
     elif d == "ver_contactos":
         markup = types.InlineKeyboardMarkup(row_width=1)
