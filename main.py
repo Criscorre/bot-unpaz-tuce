@@ -1017,10 +1017,16 @@ def callback_global(call):
 
 
 if __name__ == "__main__":
+    # Eliminar webhook/sesión anterior para evitar error 409 (instancia duplicada)
+    try:
+        bot.delete_webhook(drop_pending_updates=True)
+        print("✅ Webhook limpiado")
+    except Exception as e:
+        print(f"⚠️ No se pudo limpiar webhook: {e}")
     while True:
         try:
             print("🚀 Bot TUCE — Talentos + Herramientas + IA")
-            bot.infinity_polling(timeout=40)
+            bot.infinity_polling(timeout=40, allowed_updates=[])
         except Exception as e:
             print(f"Error: {e}")
-            time.sleep(10)
+            time.sleep(15)
