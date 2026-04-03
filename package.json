@@ -10,7 +10,8 @@
     "@whiskeysockets/baileys": "^6.7.9",
     "axios": "^1.7.9",
     "pino": "^9.5.0",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "firebase-admin": "^12.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
