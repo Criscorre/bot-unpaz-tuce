@@ -54,7 +54,9 @@ MENU_WA = (
     "4️⃣ 📄 Plan de estudios\n"
     "5️⃣ 🔗 Correlativas de una materia\n"
     "6️⃣ 💬 Consultar a la IA\n"
-    "7️⃣ 📰 Novedades UNPAZ\n\n"
+    "7️⃣ 📰 Novedades UNPAZ\n"
+    "8️⃣ 🖥️ Gestión Alumnos\n"
+    "9️⃣ 📩 Contactos y Mesa de Ayuda\n\n"
     "_Escribí *menu* en cualquier momento para volver acá._"
 )
 
@@ -192,6 +194,32 @@ def procesar_mensaje_wa(from_id: str, text: str) -> str:
             return obtener_novedades_texto(firebase_db) + "\n\n_Escribí *menu* para volver._"
         except Exception:
             return "⚠️ No se pudo cargar las novedades. Intentá más tarde.\n\nVisitá: unpaz.edu.ar"
+
+    if texto in ("8", "gestion", "gestión"):
+        return (
+            "🖥️ *Gestión Alumnos*\n\n"
+            "🎓 *Campus Virtual:*\n"
+            "https://campusvirtual.unpaz.edu.ar/\n\n"
+            "🖥️ *SIU Guaraní (inscripciones, certificados, boleto):*\n"
+            "https://estudiantes.unpaz.edu.ar/autogestion/\n\n"
+            "📄 *Equivalencias:*\n"
+            "https://unpaz.edu.ar/formularioequivalencias\n\n"
+            "🌐 *Sitio oficial UNPAZ:*\n"
+            "https://unpaz.edu.ar\n\n"
+            "_Escribí *menu* para volver._"
+        )
+
+    if texto in ("9", "contactos", "ayuda", "mesa"):
+        return (
+            "📩 *Contactos y Mesa de Ayuda*\n\n"
+            "🤝 Acceso y Apoyo:\n  accesoapoyo@unpaz.edu.ar\n\n"
+            "📝 Consultas CIU:\n  ciu@unpaz.edu.ar\n\n"
+            "👤 Consultas Estudiantes:\n  consultasestudiantes@unpaz.edu.ar\n\n"
+            "💻 Soporte SIU Guaraní:\n  soporteinscripciones@unpaz.edu.ar\n\n"
+            "🌐 UNPAZ Virtual:\n  formacionvirtual@unpaz.edu.ar\n\n"
+            "💜 ORVIG (Género):\n  orvig@unpaz.edu.ar\n\n"
+            "_Escribí *menu* para volver._"
+        )
 
     # ── Respuesta IA por defecto ──────────────────────────────────────────────
     return responder_ia(text) + "\n\n_Escribí *menu* para ver las opciones._"
