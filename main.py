@@ -744,9 +744,21 @@ def callback_global(call):
         bot.edit_message_text(res, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
     elif d == "sede_alem":
-        bot.send_location(call.message.chat.id, -34.5164, -58.7615)
+        bot.answer_callback_query(call.id)
+        bot.send_message(
+            call.message.chat.id,
+            "📍 *Sede Alem*\nLeandro N. Alem 4731, José C. Paz, Buenos Aires\n"
+            "https://maps.google.com/?q=Leandro+N.+Alem+4731,+Jose+C.+Paz,+Buenos+Aires",
+            parse_mode="Markdown"
+        )
     elif d == "sede_arregui":
-        bot.send_location(call.message.chat.id, -34.5208, -58.7758)
+        bot.answer_callback_query(call.id)
+        bot.send_message(
+            call.message.chat.id,
+            "📍 *Sede Arregui*\nAv. Héctor Arregui 501, José C. Paz, Buenos Aires\n"
+            "https://maps.google.com/?q=Av.+Hector+Arregui+501,+Jose+C.+Paz,+Buenos+Aires",
+            parse_mode="Markdown"
+        )
 
 
 if __name__ == "__main__":

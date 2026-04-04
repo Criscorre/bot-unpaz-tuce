@@ -1,16 +1,15 @@
-# wa_menu.py — Handler de WhatsApp con menú guiado (v2)
+# wa_menu.py — Handler WhatsApp v3
 #
-# Arquitectura:
-#   procesar(from_id, texto, firebase_db, responder_ia_fn) → str
+# Filosofía: si el usuario pregunta algo y tenemos la respuesta, la damos
+# directamente sin obligar a navegar por el menú. El menú existe para guiar,
+# no para bloquear.
 #
-# Flujo:
-#   1. Normalizar input
-#   2. Comandos globales (menu/volver) → siempre funcionan
-#   3. Si hay estado activo → delegar al handler de la sección
-#   4. Sin estado → interpretar como selección del menú principal
-#   5. Input desconocido → mensaje de error + menú (nunca IA por defecto)
-#
-# La IA solo se usa cuando el usuario elige explícitamente la opción 5.
+# Prioridad de procesamiento:
+#   1. Comando global (menu/hola/start) → siempre muestra el menú
+#   2. Respuesta directa por intención → si detectamos qué quiere, respondemos
+#   3. Estado activo → seguimos el flujo en curso
+#   4. Selección numerada del menú
+#   5. Fallback → menú + "no entendí"
 
 from normalizer import normalizar, es_menu, extraer_numero, contiene_alguna
 import estado as est
@@ -18,54 +17,71 @@ from materias_db import LISTA_HORARIOS
 from faq_data import FAQ
 from datos_carrera import DATA_PLAN, DATA_CALENDARIO, CORRELATIVAS, correlativas_de
 
-# ─── Textos fijos ─────────────────────────────────────────────────────────────
+# ─── Datos de sedes ───────────────────────────────────────────────────────────
+SEDES = {
+    "alem": {
+        "nombre":    "Sede Alem",
+        "direccion": "Leandro N. Alem 4731, José C. Paz, Buenos Aires",
+        "maps":      "https://maps.google.com/?q=Leandro+N.+Alem+4731,+Jose+C.+Paz,+Buenos+Aires",
+    },
+    "arregui": {
+        "nombre":    "Sede Arregui",
+        "direccion": "Av. Héctor Arregui 501, José C. Paz, Buenos Aires",
+        "maps":      "https://maps.google.com/?q=Av.+Hector+Arregui+501,+Jose+C.+Paz,+Buenos+Aires",
+    },
+}
 
+# ─── Materias indexadas ───────────────────────────────────────────────────────
+_MATERIAS = sorted(list(set(f[0] for f in LISTA_HORARIOS)))
+
+# ─── Textos fijos ─────────────────────────────────────────────────────────────
 BIENVENIDA = (
-    "¡Hola! 😃\n"
-    "Soy el asistente de la *TUCE - UNPAZ*.\n\n"
-    "Escribí *MENÚ* para ver todas las opciones disponibles."
+    "👋 ¡Hola! Soy el asistente de la\n"
+    "*Tecnicatura Universitaria en Comercio Electrónico - UNPAZ*\n\n"
+    "Podés preguntarme directamente lo que necesitás, o escribir *MENÚ* para ver todas las opciones."
 )
 
 MENU_TEXTO = (
     "📋 *Menú principal:*\n\n"
     "1️⃣  📚 Información de la carrera\n"
-    "2️⃣  🕒 Horarios de materias\n"
+    "2️⃣  🕒 Horarios del cuatrimestre\n"
     "3️⃣  👥 Comunidad TUCE\n"
     "4️⃣  ❓ Preguntas frecuentes\n"
     "5️⃣  🤖 Consultar a la IA\n\n"
-    "_Escribí el número o el nombre de la opción._\n"
+    "_Escribí el número, el nombre, o preguntame directamente._\n"
     "_Escribí MENÚ en cualquier momento para volver acá._"
 )
 
 MSG_NO_ENTENDI = (
-    "❓ No entendí tu consulta.\n"
-    "Escribí *MENÚ* para ver las opciones disponibles."
+    "❓ No entendí tu consulta.\n\n"
+    + MENU_TEXTO
 )
 
-MSG_DEMASIADOS_ERRORES = "⚠️ Demasiados intentos. Volviendo al menú...\n\n"
-
-# ─── Materias ─────────────────────────────────────────────────────────────────
-
-_MATERIAS = sorted(list(set(f[0] for f in LISTA_HORARIOS)))
+# ─── Formateo de horarios ─────────────────────────────────────────────────────
 
 def _txt_lista_materias() -> str:
     lineas = [
-        "🕒 *Horarios del cuatrimestre en curso*\n",
-        "Seleccioná una materia por número o nombre:\n",
+        "🕒 *Horarios — 1er cuatrimestre 2026*\n",
+        "Seleccioná una materia por número o escribí su nombre:\n",
     ]
     for i, m in enumerate(_MATERIAS, 1):
-        lineas.append(f"{i}. {m}")
-    lineas.append("\n_Escribí MENÚ para volver al menú principal._")
+        lineas.append(f"  {i}. {m}")
+    lineas.append("\n_Escribí MENÚ para volver._")
     return "\n".join(lineas)
 
-def _txt_horarios_materia(materia: str) -> str:
+def _txt_horario_materia(materia: str) -> str:
     filas = [f for f in LISTA_HORARIOS if f[0] == materia]
-    resp  = f"📍 *{materia}*\n\n"
+    cor   = correlativas_de(materia)
+    resp  = f"🕒 *{materia}*\n"
+    if cor and "Sin correlativas" not in cor:
+        resp += f"_{cor}_\n"
+    resp += "\n"
     for f in filas:
+        aula = f[8] if f[8] and f[8] != "//" else "A confirmar"
         resp += f"👥 *Com {f[1]}* — {f[2]} {f[3][:5]}–{f[4][:5]} hs\n"
-        resp += f"🏢 {f[8]} | {f[5]}\n"
+        resp += f"🏢 Aula: {aula} | {f[5]}\n"
         resp += "──────────\n"
-    resp += "\n_Escribí otro número para ver otra materia, o MENÚ para volver._"
+    resp += "\n_Escribí otra materia, un número, o MENÚ para volver._"
     return resp
 
 def _buscar_materia(texto_norm: str) -> str | None:
@@ -73,13 +89,22 @@ def _buscar_materia(texto_norm: str) -> str | None:
     num = extraer_numero(texto_norm)
     if num is not None and 1 <= num <= len(_MATERIAS):
         return _MATERIAS[num - 1]
+    # Búsqueda exacta normalizada
     for m in _MATERIAS:
-        if texto_norm in normalizar(m):
+        if texto_norm == normalizar(m):
             return m
-    for palabra in texto_norm.split():
-        if len(palabra) >= 4:
+    # Búsqueda parcial: todas las palabras del input en el nombre
+    palabras = [p for p in texto_norm.split() if len(p) >= 3]
+    if palabras:
+        for m in _MATERIAS:
+            m_norm = normalizar(m)
+            if all(p in m_norm for p in palabras):
+                return m
+    # Búsqueda con una sola palabra clave larga
+    for p in sorted(palabras, key=len, reverse=True):
+        if len(p) >= 4:
             for m in _MATERIAS:
-                if palabra in normalizar(m):
+                if p in normalizar(m):
                     return m
     return None
 
@@ -88,16 +113,16 @@ def _buscar_materia(texto_norm: str) -> str | None:
 SUBMENU_CARRERA = (
     "📚 *Información de la carrera:*\n\n"
     "1. 📄 Plan de estudios\n"
-    "2. 🔗 Correlativas de una materia\n"
+    "2. 🔗 Correlativas\n"
     "3. 🗓️ Calendario académico\n"
-    "4. 🖥️ Gestión (Campus, SIU Guaraní)\n"
+    "4. 🖥️ Gestión (Campus / SIU Guaraní)\n"
     "5. 📍 Sedes\n"
     "6. 📩 Contactos y Mesa de Ayuda\n\n"
     "_Escribí el número o MENÚ para volver._"
 )
 
 def _txt_plan() -> str:
-    resp = "📄 *Plan de Estudios TUCE*\n\n"
+    resp = "📄 *Plan de Estudios*\n*Tecnicatura Universitaria en Comercio Electrónico*\n\n"
     for anio, materias in DATA_PLAN.items():
         resp += f"*{anio}:*\n"
         for m in materias:
@@ -123,14 +148,11 @@ def _txt_gestion() -> str:
     )
 
 def _txt_sedes() -> str:
-    return (
-        "📍 *Sedes UNPAZ:*\n\n"
-        "🏢 *Sede Alem*\nAv. Alem 4731, José C. Paz\n"
-        "https://maps.google.com/?q=-34.5164,-58.7615\n\n"
-        "🏢 *Sede Arregui*\nArregui 2080, José C. Paz\n"
-        "https://maps.google.com/?q=-34.5208,-58.7758\n\n"
-        "_Escribí MENÚ para volver._"
-    )
+    resp = "📍 *Sedes UNPAZ:*\n\n"
+    for s in SEDES.values():
+        resp += f"🏢 *{s['nombre']}*\n{s['direccion']}\n{s['maps']}\n\n"
+    resp += "_Escribí MENÚ para volver._"
+    return resp
 
 def _txt_contactos() -> str:
     return (
@@ -138,7 +160,7 @@ def _txt_contactos() -> str:
         "🤝 Acceso y Apoyo (Becas/Tutorías):\n  accesoapoyo@unpaz.edu.ar\n\n"
         "📝 CIU (Ingreso):\n  ciu@unpaz.edu.ar\n\n"
         "👤 Consultas Estudiantes:\n  consultasestudiantes@unpaz.edu.ar\n\n"
-        "💻 SIU Guaraní:\n  soporteinscripciones@unpaz.edu.ar\n\n"
+        "💻 Soporte SIU Guaraní:\n  soporteinscripciones@unpaz.edu.ar\n\n"
         "🌐 UNPAZ Virtual:\n  formacionvirtual@unpaz.edu.ar\n\n"
         "💜 ORVIG (Género):\n  orvig@unpaz.edu.ar\n\n"
         "_Escribí MENÚ para volver._"
@@ -146,108 +168,20 @@ def _txt_contactos() -> str:
 
 def _txt_comunidad() -> str:
     return (
-        "👥 *Comunidad TUCE*\n\n"
-        "Sumate a la comunidad 👇\n\n"
+        "👥 *Comunidad TUCE*\n\nSumate 👇\n\n"
         "💬 *WhatsApp TUCE:*\nhttps://chat.whatsapp.com/FSwCNJd2GirBVIVCZDGU0B\n\n"
         "💬 *Grupo adicional:*\nhttps://chat.whatsapp.com/JElcFd4U08QBKsL1J1YM8u\n\n"
         "📸 *Instagram:*\nhttps://www.instagram.com/tuce_unpaz/\n\n"
         "📘 *Facebook:*\nhttps://m.facebook.com/tuceunpaz/\n\n"
-        "_Escribí MENÚ para volver al menú principal._"
+        "_Escribí MENÚ para volver._"
     )
 
-# Mapeo de palabras clave → número de sub-opción en carrera
-_KEYWORDS_CARRERA = {
-    1: ["plan", "estudio", "materia", "asignatura"],
-    2: ["correlativa", "requiere", "necesita", "previa"],
-    3: ["calendario", "fecha", "cuando", "inicio", "semestre"],
-    4: ["gestion", "campus", "siu", "guarani", "inscripcion", "certificado", "boleto"],
-    5: ["sede", "donde", "alem", "arregui", "direccion"],
-    6: ["contacto", "ayuda", "email", "correo", "mesa", "beca", "pasantia"],
-}
-
-def _opcion_carrera_por_texto(texto_norm: str) -> int | None:
-    for num, keywords in _KEYWORDS_CARRERA.items():
-        if contiene_alguna(texto_norm, keywords):
-            return num
-    return None
-
-def _handle_carrera(uid: str, texto_norm: str) -> str:
-    estado    = est.get(uid)
-    esperando = estado.get("esperando")
-
-    # ── Esperando nombre de materia para correlativas ─────────────────────────
-    if esperando == "correlativa":
-        encontrada = None
-        for info in CORRELATIVAS.values():
-            if texto_norm in normalizar(info["nombre"]):
-                encontrada = info
-                break
-        if not encontrada:
-            if est.sumar_error(uid):
-                est.salir(uid)
-                return MSG_DEMASIADOS_ERRORES + MENU_TEXTO
-            return (
-                "❌ No encontré esa materia.\n"
-                "Intentá con otro nombre o parte del nombre.\n"
-                "_Ejemplo: 'desarrollo', 'ingles', 'marketing'_"
-            )
-        est.entrar(uid, "carrera")  # vuelve al sub-menú de carrera
-        nombre = encontrada["nombre"]
-        if not encontrada["necesita"]:
-            return (
-                f"✅ *{nombre}*\n\n"
-                "No tiene correlativas. ¡Podés cursarla cuando quieras!\n\n"
-                "_Escribí otro número o MENÚ para volver._"
-            )
-        previas = "\n".join(f"  • {CORRELATIVAS[c]['nombre']}" for c in encontrada["necesita"])
-        return (
-            f"🔗 *{nombre}*\n\n"
-            f"Para cursarla necesitás tener aprobada/s:\n{previas}\n\n"
-            "_Escribí otro nombre de materia o MENÚ para volver._"
-        )
-
-    # ── Sub-menú de carrera ───────────────────────────────────────────────────
-    num = extraer_numero(texto_norm) or _opcion_carrera_por_texto(texto_norm)
-
-    respuestas = {
-        1: (None,          _txt_plan()),
-        2: ("correlativa", "🔗 *Correlativas*\n\nEscribí el nombre (o parte) de la materia:\n_Ejemplo: 'marketing', 'ingles', 'desarrollo'_"),
-        3: (None,          _txt_calendario()),
-        4: (None,          _txt_gestion()),
-        5: (None,          _txt_sedes()),
-        6: (None,          _txt_contactos()),
-    }
-
-    if num in respuestas:
-        next_esp, texto_resp = respuestas[num]
-        est.entrar(uid, "carrera", esperando=next_esp)
-        return texto_resp
-
-    if est.sumar_error(uid):
-        est.salir(uid)
-        return MSG_DEMASIADOS_ERRORES + MENU_TEXTO
-    return SUBMENU_CARRERA
-
-
-# ─── Sección: Horarios ────────────────────────────────────────────────────────
-
-def _handle_horarios(uid: str, texto_norm: str) -> str:
-    materia = _buscar_materia(texto_norm)
-    if materia:
-        est.avanzar(uid, esperando="materia")  # reset errores, permanece en horarios
-        return _txt_horarios_materia(materia)
-    if est.sumar_error(uid):
-        est.salir(uid)
-        return MSG_DEMASIADOS_ERRORES + MENU_TEXTO
-    return "❌ No encontré esa materia.\n\n" + _txt_lista_materias()
-
-
-# ─── Sección: FAQ ─────────────────────────────────────────────────────────────
+# ─── FAQ ──────────────────────────────────────────────────────────────────────
 
 def _txt_lista_faq() -> str:
     lineas = ["❓ *Preguntas frecuentes:*\n"]
     for i, item in enumerate(FAQ, 1):
-        lineas.append(f"{i}. {item['q']}")
+        lineas.append(f"  {i}. {item['q']}")
     lineas.append("\n_Escribí el número de tu pregunta, o MENÚ para volver._")
     return "\n".join(lineas)
 
@@ -255,10 +189,160 @@ def _buscar_faq(texto_norm: str) -> dict | None:
     num = extraer_numero(texto_norm)
     if num is not None and 1 <= num <= len(FAQ):
         return FAQ[num - 1]
+    palabras = [p for p in texto_norm.split() if len(p) >= 4]
     for item in FAQ:
-        if any(p in normalizar(item["q"]) for p in texto_norm.split() if len(p) >= 4):
+        q_norm = normalizar(item["q"])
+        if any(p in q_norm for p in palabras):
             return item
     return None
+
+# ─── Detección de intención directa ──────────────────────────────────────────
+# Si el usuario escribe algo que claramente tiene respuesta en nuestros datos,
+# respondemos directamente sin exigir que navegue por el menú.
+
+_KEYWORDS_HORARIO    = ["horario", "hora", "cuando cursa", "dia de", "aula", "comision", "cuando es"]
+_KEYWORDS_CORRELATIVA = ["correlativa", "requiere", "necesito tener", "previa", "para cursar"]
+_KEYWORDS_SEDE       = ["sede", "donde queda", "donde esta", "direccion", "como llego"]
+_KEYWORDS_CALENDARIO = ["calendario", "cuando empiezan", "inicio de clases", "inscripcion", "cuatrimestre"]
+_KEYWORDS_PLAN       = ["plan de estudio", "materias de la carrera", "que materias hay", "cuantos anos"]
+_KEYWORDS_COMUNIDAD  = ["grupo de whatsapp", "instagram", "facebook", "comunidad", "redes sociales"]
+_KEYWORDS_GESTION    = ["campus", "guarani", "siu", "certificado", "boleto estudiantil", "equivalencia"]
+_KEYWORDS_CONTACTO   = ["contacto", "mail", "email", "correo", "mesa de ayuda", "beca", "pasantia"]
+
+def _respuesta_directa(texto_norm: str, texto_original: str) -> str | None:
+    """
+    Intenta dar una respuesta directa si detecta la intención claramente.
+    Devuelve la respuesta como string, o None si no puede determinar la intención.
+    """
+    # ¿Pregunta por una materia específica?
+    materia = _buscar_materia(texto_norm)
+    if materia:
+        return _txt_horario_materia(materia)
+
+    # ¿Pregunta por correlativas de una materia específica?
+    if contiene_alguna(texto_norm, _KEYWORDS_CORRELATIVA):
+        # Intentar extraer nombre de materia del mismo mensaje
+        materia = _buscar_materia(texto_norm)
+        if materia:
+            cor = correlativas_de(materia)
+            return f"🔗 *{materia}*\n\n{cor}\n\n_Escribí MENÚ para volver._"
+        # No encontró materia → pedir que especifique
+        return None
+
+    # ¿Pregunta por horarios en general?
+    if contiene_alguna(texto_norm, _KEYWORDS_HORARIO):
+        materia = _buscar_materia(texto_norm)
+        if materia:
+            return _txt_horario_materia(materia)
+        return _txt_lista_materias()
+
+    # ¿Pregunta por una sede?
+    if contiene_alguna(texto_norm, _KEYWORDS_SEDE):
+        if contiene_alguna(texto_norm, ["alem"]):
+            s = SEDES["alem"]
+            return f"📍 *{s['nombre']}*\n{s['direccion']}\n{s['maps']}\n\n_Escribí MENÚ para volver._"
+        if contiene_alguna(texto_norm, ["arregui"]):
+            s = SEDES["arregui"]
+            return f"📍 *{s['nombre']}*\n{s['direccion']}\n{s['maps']}\n\n_Escribí MENÚ para volver._"
+        return _txt_sedes()
+
+    # ¿Pregunta por el calendario?
+    if contiene_alguna(texto_norm, _KEYWORDS_CALENDARIO):
+        return _txt_calendario()
+
+    # ¿Pregunta por el plan de estudios?
+    if contiene_alguna(texto_norm, _KEYWORDS_PLAN):
+        return _txt_plan()
+
+    # ¿Pregunta por la comunidad / redes?
+    if contiene_alguna(texto_norm, _KEYWORDS_COMUNIDAD):
+        return _txt_comunidad()
+
+    # ¿Pregunta por gestión / campus / SIU?
+    if contiene_alguna(texto_norm, _KEYWORDS_GESTION):
+        return _txt_gestion()
+
+    # ¿Pregunta por contactos / mesa de ayuda?
+    if contiene_alguna(texto_norm, _KEYWORDS_CONTACTO):
+        return _txt_contactos()
+
+    # ¿Hay una pregunta frecuente que coincida?
+    faq = _buscar_faq(texto_norm)
+    if faq:
+        return faq["a"] + "\n\n_Escribí MENÚ para ver más opciones._"
+
+    return None
+
+# ─── Handlers de sección ─────────────────────────────────────────────────────
+
+def _handle_carrera(uid: str, texto_norm: str) -> str:
+    estado    = est.get(uid)
+    esperando = estado.get("esperando")
+
+    if esperando == "correlativa":
+        materia = _buscar_materia(texto_norm)
+        if materia:
+            cor = correlativas_de(materia)
+            est.avanzar(uid, esperando=None)
+            return (
+                f"🔗 *{materia}*\n\n{cor}\n\n"
+                "_Escribí otra materia, un número del submenú o MENÚ para volver._"
+            )
+        if est.sumar_error(uid):
+            est.salir(uid)
+            return "⚠️ No pude encontrar esa materia.\n\n" + MENU_TEXTO
+        return (
+            "❌ No encontré esa materia. Intentá con otra parte del nombre.\n"
+            "_Ejemplo: 'desarrollo', 'ingles', 'marketing'_"
+        )
+
+    # Sub-menú de carrera: acepta número o palabra clave
+    _MAP = {
+        1: (None,          _txt_plan),
+        2: ("correlativa", lambda: "🔗 Escribí el nombre (o parte) de la materia:\n_Ejemplo: 'marketing', 'ingles'_"),
+        3: (None,          _txt_calendario),
+        4: (None,          _txt_gestion),
+        5: (None,          _txt_sedes),
+        6: (None,          _txt_contactos),
+    }
+    _KEYWORDS_SUB = {
+        1: ["plan", "estudio", "materias de la carrera"],
+        2: ["correlativa", "previa", "requiere"],
+        3: ["calendario", "fecha", "cuando"],
+        4: ["gestion", "campus", "guarani", "siu", "certificado"],
+        5: ["sede", "donde"],
+        6: ["contacto", "ayuda", "mail", "beca"],
+    }
+
+    num = extraer_numero(texto_norm)
+    if num is None:
+        for n, kws in _KEYWORDS_SUB.items():
+            if contiene_alguna(texto_norm, kws):
+                num = n
+                break
+
+    if num in _MAP:
+        next_esp, fn = _MAP[num]
+        est.entrar(uid, "carrera", esperando=next_esp)
+        return fn()
+
+    if est.sumar_error(uid):
+        est.salir(uid)
+        return "⚠️ Demasiados intentos. Volviendo al menú.\n\n" + MENU_TEXTO
+    return SUBMENU_CARRERA
+
+def _handle_horarios(uid: str, texto_norm: str) -> str:
+    materia = _buscar_materia(texto_norm)
+    if materia:
+        est.avanzar(uid, esperando="materia")
+        return _txt_horario_materia(materia)
+    if est.sumar_error(uid):
+        est.salir(uid)
+        return "⚠️ No encontré esa materia. Volviendo al menú.\n\n" + MENU_TEXTO
+    return (
+        "❌ No encontré esa materia. Probá con el número de la lista o parte del nombre.\n\n"
+        + _txt_lista_materias()
+    )
 
 def _handle_faq(uid: str, texto_norm: str) -> str:
     item = _buscar_faq(texto_norm)
@@ -267,63 +351,50 @@ def _handle_faq(uid: str, texto_norm: str) -> str:
         return item["a"] + "\n\n_Escribí otro número o MENÚ para volver._"
     if est.sumar_error(uid):
         est.salir(uid)
-        return MSG_DEMASIADOS_ERRORES + MENU_TEXTO
+        return "⚠️ Demasiados intentos. Volviendo al menú.\n\n" + MENU_TEXTO
     return "❌ No encontré esa pregunta.\n\n" + _txt_lista_faq()
 
+# ─── Métricas ─────────────────────────────────────────────────────────────────
 
-# ─── Métricas básicas en Firebase ────────────────────────────────────────────
-
-def _log_uso(firebase_db, seccion: str):
-    """Incrementa contador de uso por sección en Firebase."""
+def _log(firebase_db, seccion: str):
     try:
-        ref = firebase_db.reference(f"metricas/wa/{seccion}")
+        import datetime
+        hoy = datetime.date.today().strftime("%Y-%m-%d")
+        ref = firebase_db.reference(f"metricas/wa/{hoy}/{seccion}")
         actual = ref.get() or 0
         ref.set(actual + 1)
     except Exception:
         pass
 
-
-# ─── Selección del menú principal ────────────────────────────────────────────
-
-_KEYWORDS_MENU = {
-    1: ["informacion", "carrera", "plan", "estudio"],
-    2: ["horario", "horarios", "materia", "materias", "clase"],
-    3: ["comunidad", "grupo", "instagram", "facebook", "redes"],
-    4: ["faq", "pregunta", "frecuente", "duda", "consulta"],
-    5: ["ia", "inteligencia", "gpt", "chat", "consultar"],
-}
-
-def _opcion_menu_por_texto(texto_norm: str) -> int | None:
-    for num, keywords in _KEYWORDS_MENU.items():
-        if contiene_alguna(texto_norm, keywords):
-            return num
-    return None
-
-
 # ─── Función principal ────────────────────────────────────────────────────────
 
 def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
-    """
-    Procesa un mensaje de WhatsApp y devuelve la respuesta.
-
-    Args:
-        from_id:        ID del remitente (WA JID o número)
-        texto:          Mensaje original sin modificar
-        firebase_db:    Referencia a Firebase (para métricas y novedades)
-        responder_ia_fn: Función responder_ia() de main.py (solo llamada en opción 5)
-    """
     texto_norm = normalizar(texto)
 
-    # ── Comandos globales: vuelven al menú desde cualquier lugar ──────────────
-    if es_menu(texto) or texto_norm == "menu":
+    # ── 1. Comandos globales ──────────────────────────────────────────────────
+    if es_menu(texto) or texto_norm in ("menu", "manu"):
         est.salir(from_id)
-        _log_uso(firebase_db, "menu")
+        _log(firebase_db, "menu")
         return MENU_TEXTO
 
+    # Primer contacto (no tiene estado previo y no es un número ni keyword)
     estado  = est.get(from_id)
     seccion = estado.get("seccion")
+    es_primer_contacto = (
+        seccion is None and
+        estado.get("errores", 0) == 0 and
+        extraer_numero(texto_norm) is None and
+        not contiene_alguna(texto_norm, ["horario","correlativa","sede","plan","carrera","materia","calendario","campus","guarani","comunidad","beca","contacto","ayuda","faq"])
+    )
 
-    # ── Dentro de una sección activa ──────────────────────────────────────────
+    # ── 2. Respuesta directa (siempre intentamos antes de evaluar el estado) ──
+    directa = _respuesta_directa(texto_norm, texto)
+    if directa:
+        est.salir(from_id)   # reset estado: respuesta directa no interrumpe flujo futuro
+        _log(firebase_db, "directa")
+        return directa
+
+    # ── 3. Estado activo ──────────────────────────────────────────────────────
     if seccion == "carrera":
         return _handle_carrera(from_id, texto_norm)
 
@@ -334,48 +405,58 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
         return _handle_faq(from_id, texto_norm)
 
     if seccion == "ia":
+        _log(firebase_db, "ia")
         respuesta = responder_ia_fn(texto)
-        return respuesta + "\n\n_Escribí MENÚ para volver al menú principal._"
+        return respuesta + "\n\n_Escribí MENÚ para volver al menú._"
 
-    # ── Sin sección activa: interpretar como selección del menú principal ─────
-    num = extraer_numero(texto_norm) or _opcion_menu_por_texto(texto_norm)
+    # ── 4. Selección del menú principal ───────────────────────────────────────
+    _KEYWORDS_OPCION = {
+        1: ["informacion", "carrera", "plan", "estudio"],
+        2: ["horario", "horarios", "clases", "materias"],
+        3: ["comunidad", "grupo", "instagram", "facebook", "redes"],
+        4: ["faq", "pregunta", "frecuente", "duda"],
+        5: ["ia", "inteligencia", "gpt", "consultar"],
+    }
+    num = extraer_numero(texto_norm)
+    if num is None:
+        for n, kws in _KEYWORDS_OPCION.items():
+            if contiene_alguna(texto_norm, kws):
+                num = n
+                break
 
     if num == 1:
         est.entrar(from_id, "carrera")
-        _log_uso(firebase_db, "carrera")
+        _log(firebase_db, "carrera")
         return SUBMENU_CARRERA
 
     if num == 2:
         est.entrar(from_id, "horarios", esperando="materia")
-        _log_uso(firebase_db, "horarios")
+        _log(firebase_db, "horarios")
         return _txt_lista_materias()
 
     if num == 3:
-        _log_uso(firebase_db, "comunidad")
+        _log(firebase_db, "comunidad")
         return _txt_comunidad()
 
     if num == 4:
         est.entrar(from_id, "faq")
-        _log_uso(firebase_db, "faq")
+        _log(firebase_db, "faq")
         return _txt_lista_faq()
 
     if num == 5:
         est.entrar(from_id, "ia")
-        _log_uso(firebase_db, "ia")
+        _log(firebase_db, "ia_activado")
         return (
             "🤖 *Modo IA activado*\n\n"
-            "Preguntame lo que necesites sobre la carrera, trámites o UNPAZ.\n"
-            "_La IA responde solo sobre la TUCE y UNPAZ._\n\n"
-            "_Escribí MENÚ para volver al menú principal._"
+            "Preguntame sobre la carrera, trámites, becas o UNPAZ.\n"
+            "_Escribí MENÚ para volver._"
         )
 
-    # ── Input desconocido: primer mensaje → bienvenida, resto → error ─────────
-    if seccion is None and estado.get("errores", 0) == 0:
-        _log_uso(firebase_db, "bienvenida")
-        # Primer contacto: dar bienvenida + menú
-        est.entrar(from_id, None)  # marcar que ya saludamos
-        # En realidad no guardamos estado "saludado", simplemente mostramos menú
-        est.salir(from_id)
+    # ── 5. Primer contacto → bienvenida ───────────────────────────────────────
+    if es_primer_contacto:
+        _log(firebase_db, "bienvenida")
         return BIENVENIDA + "\n\n" + MENU_TEXTO
 
+    # ── 6. Fallback ───────────────────────────────────────────────────────────
+    _log(firebase_db, "fallback")
     return MSG_NO_ENTENDI
