@@ -47,7 +47,8 @@ MENU_TEXTO = (
     "2️⃣  🕒 Horarios del cuatrimestre\n"
     "3️⃣  👥 Comunidad TUCE\n"
     "4️⃣  ❓ Preguntas frecuentes\n"
-    "5️⃣  🤖 Consultar a la IA\n\n"
+    "5️⃣  📍 Sedes UNPAZ\n"
+    "6️⃣  🤖 Consultar a la IA\n\n"
     "_Escribí el número, el nombre, o preguntame directamente._\n"
     "_Escribí MENÚ en cualquier momento para volver acá._"
 )
@@ -403,7 +404,8 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
         2: ["horarios", "horario de", "que materias hay", "materias disponibles"],
         3: ["comunidad", "grupo de whatsapp", "instagram", "facebook", "redes sociales"],
         4: ["preguntas frecuentes", "faq", "dudas frecuentes"],
-        5: ["consultar ia", "hablar con ia", "pregunta a la ia"],
+        5: ["sede", "donde queda", "donde esta", "direccion", "como llego"],
+        6: ["consultar ia", "hablar con ia", "pregunta a la ia"],
     }
     if num is None:
         for n, kws in _KEYWORDS_OPCION.items():
@@ -431,6 +433,10 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
         return _txt_lista_faq()
 
     if num == 5:
+        _log(firebase_db, "sedes")
+        return _txt_sedes()
+
+    if num == 6:
         est.entrar(from_id, "ia")
         _log(firebase_db, "ia_activado")
         return (
