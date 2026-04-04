@@ -74,21 +74,24 @@ MSG_NO_ENTENDI = (
 )
 
 MSG_CERRAR = (
-    "👋 ¡Hasta luego{nombre}! Cuando necesites algo, acá estoy.\n\n"
-    "_Att: Bytes Creativos_"
+    "👋 ¡Hasta luego{nombre}! Cuando necesites algo, acá estoy. 😊"
 )
 
 # ─── Firebase: memoria de nombre ─────────────────────────────────────────────
 
+def _esc_uid(uid: str) -> str:
+    """Escapa caracteres inválidos para claves de Firebase (. @ +)."""
+    return uid.replace(".", "___DOT___").replace("@", "___AT___").replace("+", "___PLUS___")
+
 def _get_nombre(firebase_db, uid: str) -> str | None:
     try:
-        return firebase_db.reference(f"wa_usuarios/{uid}/nombre").get()
+        return firebase_db.reference(f"wa_usuarios/{_esc_uid(uid)}/nombre").get()
     except:
         return None
 
 def _set_nombre(firebase_db, uid: str, nombre: str):
     try:
-        firebase_db.reference(f"wa_usuarios/{uid}").set({"nombre": nombre.strip().capitalize()})
+        firebase_db.reference(f"wa_usuarios/{_esc_uid(uid)}").set({"nombre": nombre.strip().capitalize()})
     except:
         pass
 
@@ -227,7 +230,10 @@ def _buscar_faq(texto_norm: str) -> dict | None:
     num = extraer_numero(texto_norm)
     if num is not None and 1 <= num <= len(FAQ):
         return FAQ[num - 1]
-    palabras = [p for p in texto_norm.split() if len(p) >= 4]
+    # Solo palabras de 5+ caracteres para evitar falsos positivos
+    palabras = [p for p in texto_norm.split() if len(p) >= 5]
+    if not palabras:
+        return None
     for item in FAQ:
         q_norm = normalizar(item["q"])
         if any(p in q_norm for p in palabras):
@@ -421,6 +427,10 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
     nombre_db  = _get_nombre(firebase_db, from_id)
     saludo     = f", {nombre_db}" if nombre_db else ""
 
+    # ── Estado actual ─────────────────────────────────────────────────────────
+    estado  = est.get(from_id)
+    seccion = estado.get("seccion")
+
     # ── Comandos globales ─────────────────────────────────────────────────────
     if es_menu(texto) or texto_norm == "manu":
         est.salir(from_id)
@@ -433,6 +443,10 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
         return MSG_CERRAR.format(nombre=saludo)
 
     if texto_norm in ("atras", "volver", "anterior"):
+        # Si estamos en correlativas, volvemos al submenú de carrera
+        if seccion == "carrera" and estado.get("esperando") == "correlativa":
+            est.entrar(from_id, "carrera")
+            return SUBMENU_CARRERA
         ultima = est.volver_atras(from_id)
         if ultima == "carrera":
             return SUBMENU_CARRERA
@@ -441,10 +455,6 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
         if ultima == "faq":
             return _txt_lista_faq()
         return MENU_TEXTO
-
-    # ── Flujo: esperando nombre ───────────────────────────────────────────────
-    estado  = est.get(from_id)
-    seccion = estado.get("seccion")
 
     if seccion == "esperando_nombre":
         nombre_ingresado = texto.strip().split()[0].capitalize()
@@ -508,6 +518,16 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
             "🤖 *Modo IA activado*\n\n"
             "Preguntame sobre la TUCE, trámites, becas o UNPAZ.\n"
             "_No respondo sobre horarios ni aulas — para eso usá la opción 2._"
+        ) + _pie()
+
+    # ── Respuestas especiales antes del fallback ──────────────────────────────
+    # Quién te creó / quién sos
+    if contiene_alguna(texto_norm, ["quien te creo", "quien te hizo", "quien te desarrollo", "bytes creativos", "quien sos", "como te llamas", "cual es tu nombre"]):
+        return (
+            "Soy *Alma TUCE* 🎓\n\n"
+            "Fui desarrollada por *Bytes Creativos*, agencia de marketing y soluciones digitales nacida en la UNPAZ.\n"
+            "📱 https://bytescreativos.com.ar/\n"
+            "📸 @bytescreativoss"
         ) + _pie()
 
     # ── Texto libre: respuesta directa por intención ──────────────────────────
