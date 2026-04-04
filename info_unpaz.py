@@ -1,7 +1,7 @@
 # info_unpaz.py
 
 DATOS_TECNICATURA = """
-TECNICATURA UNIVERSITARIA EN COMERCIO ELECTRÓNICO (TUCE)
+TECNICATURA UNIVERSITARIA EN COMERCIO ELECTRÓNICO
 Propósito: Formar profesionales para elaborar estrategias de comercialización digital aplicando herramientas informáticas.
 
 Alcance del Título:
