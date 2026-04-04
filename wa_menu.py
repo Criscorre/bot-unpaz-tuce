@@ -377,24 +377,10 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
         _log(firebase_db, "menu")
         return MENU_TEXTO
 
-    # Primer contacto (no tiene estado previo y no es un número ni keyword)
     estado  = est.get(from_id)
     seccion = estado.get("seccion")
-    es_primer_contacto = (
-        seccion is None and
-        estado.get("errores", 0) == 0 and
-        extraer_numero(texto_norm) is None and
-        not contiene_alguna(texto_norm, ["horario","correlativa","sede","plan","carrera","materia","calendario","campus","guarani","comunidad","beca","contacto","ayuda","faq"])
-    )
 
-    # ── 2. Respuesta directa (siempre intentamos antes de evaluar el estado) ──
-    directa = _respuesta_directa(texto_norm, texto)
-    if directa:
-        est.salir(from_id)   # reset estado: respuesta directa no interrumpe flujo futuro
-        _log(firebase_db, "directa")
-        return directa
-
-    # ── 3. Estado activo ──────────────────────────────────────────────────────
+    # ── 2. Estado activo → el flujo en curso tiene prioridad ─────────────────
     if seccion == "carrera":
         return _handle_carrera(from_id, texto_norm)
 
@@ -406,18 +392,19 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
 
     if seccion == "ia":
         _log(firebase_db, "ia")
-        respuesta = responder_ia_fn(texto)
-        return respuesta + "\n\n_Escribí MENÚ para volver al menú._"
+        return responder_ia_fn(texto) + "\n\n_Escribí MENÚ para volver al menú._"
 
-    # ── 4. Selección del menú principal ───────────────────────────────────────
-    _KEYWORDS_OPCION = {
-        1: ["informacion", "carrera", "plan", "estudio"],
-        2: ["horario", "horarios", "clases", "materias"],
-        3: ["comunidad", "grupo", "instagram", "facebook", "redes"],
-        4: ["faq", "pregunta", "frecuente", "duda"],
-        5: ["ia", "inteligencia", "gpt", "consultar"],
-    }
+    # ── 3. Sin estado activo: primero menú numerado, luego texto libre ────────
+    # Números 1-5 siempre van al menú principal (nunca a materias)
     num = extraer_numero(texto_norm)
+
+    _KEYWORDS_OPCION = {
+        1: ["informacion", "info carrera", "plan de estudio"],
+        2: ["horarios", "horario de", "que materias hay", "materias disponibles"],
+        3: ["comunidad", "grupo de whatsapp", "instagram", "facebook", "redes sociales"],
+        4: ["preguntas frecuentes", "faq", "dudas frecuentes"],
+        5: ["consultar ia", "hablar con ia", "pregunta a la ia"],
+    }
     if num is None:
         for n, kws in _KEYWORDS_OPCION.items():
             if contiene_alguna(texto_norm, kws):
@@ -452,9 +439,17 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
             "_Escribí MENÚ para volver._"
         )
 
-    # ── 5. Primer contacto → bienvenida ───────────────────────────────────────
-    if es_primer_contacto:
+    # ── 4. Texto libre sin estado: respuesta directa por intención ───────────
+    directa = _respuesta_directa(texto_norm, texto)
+    if directa:
+        _log(firebase_db, "directa")
+        return directa
+
+    # ── 5. Primer contacto → bienvenida ──────────────────────────────────────
+    if estado.get("errores", 0) == 0:
         _log(firebase_db, "bienvenida")
+        est.entrar(from_id, None)  # marcar que ya fue saludado
+        est.salir(from_id)
         return BIENVENIDA + "\n\n" + MENU_TEXTO
 
     # ── 6. Fallback ───────────────────────────────────────────────────────────
