@@ -762,7 +762,9 @@ def callback_global(call):
 
 
 if __name__ == "__main__":
-    # Eliminar webhook/sesión anterior para evitar error 409 (instancia duplicada)
+    # Esperar que el deploy anterior termine antes de empezar polling
+    print("⏳ Esperando 20s para que el deploy anterior termine...")
+    time.sleep(20)
     try:
         bot.delete_webhook(drop_pending_updates=True)
         print("✅ Webhook limpiado")
@@ -773,5 +775,10 @@ if __name__ == "__main__":
             print("🚀 Bot TUCE — Talentos + Herramientas + IA")
             bot.infinity_polling(timeout=40, allowed_updates=[])
         except Exception as e:
-            print(f"Error: {e}")
-            time.sleep(15)
+            err = str(e)
+            if "409" in err:
+                print(f"⚠️ 409 Conflicto — esperando 30s antes de reintentar...")
+                time.sleep(30)
+            else:
+                print(f"Error: {e}")
+                time.sleep(15)

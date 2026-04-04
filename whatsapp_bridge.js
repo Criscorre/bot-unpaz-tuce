@@ -149,15 +149,16 @@ async function startBot() {
         }
         if (connection === "close") {
             const code = lastDisconnect?.error?.output?.statusCode;
-            if (code !== DisconnectReason.loggedOut) {
-                console.log("🔄 Reconectando...");
-                startBot();
-            } else {
-                console.log("❌ Sesión cerrada. Escaneá el QR en /qr para reconectar.");
-                // Limpiar sesión inválida de Firebase
+            if (code === DisconnectReason.loggedOut) {
+                console.log("❌ Sesión cerrada. Limpiando y reconectando...");
                 if (fbDb) await fbDb.ref(FB_SESSION_KEY).remove();
                 if (fs.existsSync(SESSION_DIR)) fs.rmSync(SESSION_DIR, { recursive: true });
-                startBot();
+                setTimeout(() => startBot(), 5000);
+            } else {
+                // Backoff: esperar antes de reconectar para no saturar
+                const delay = 5000 + Math.random() * 5000;
+                console.log(`🔄 Reconectando en ${Math.round(delay/1000)}s...`);
+                setTimeout(() => startBot(), delay);
             }
         }
     });
@@ -181,18 +182,27 @@ async function startBot() {
 
             console.log(`📩 ${from}: ${text}`);
 
-            try {
-                const res = await axios.post(
-                    WEBHOOK_URL,
-                    { from, message: text },
-                    { timeout: 20000 }
-                );
-                const respuesta = res.data?.response || "⚠️ Sin respuesta";
+            // Reintentar POST al Flask hasta 3 veces con espera entre intentos
+            let respuesta = null;
+            for (let intento = 1; intento <= 3; intento++) {
+                try {
+                    const res = await axios.post(
+                        WEBHOOK_URL,
+                        { from, message: text },
+                        { timeout: 25000 }
+                    );
+                    respuesta = res.data?.response;
+                    break;
+                } catch (err) {
+                    console.error(`❌ Error webhook (intento ${intento}/3):`, err.message);
+                    if (intento < 3) await new Promise(r => setTimeout(r, 3000 * intento));
+                }
+            }
+            if (respuesta) {
                 await sock.sendMessage(from, { text: respuesta });
-            } catch (err) {
-                console.error("❌ Error webhook:", err.message);
+            } else {
                 await sock.sendMessage(from, {
-                    text: "⚠️ Tuve un problema. Intentá de nuevo en un momento.",
+                    text: "⚠️ El servicio está iniciando. Intentá de nuevo en 30 segundos.",
                 });
             }
         }
