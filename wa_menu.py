@@ -44,13 +44,13 @@ def _pie(extra: str = "") -> str:
 
 # ─── Textos fijos ─────────────────────────────────────────────────────────────
 BIENVENIDA_BASE = (
-    "👋 ¡Hola{nombre}! Soy el asistente de la\n"
+    "👋 ¡Hola{nombre}! Soy *Alma TUCE*, tu asistente de la\n"
     "*Tecnicatura Universitaria en Comercio Electrónico - UNPAZ*\n\n"
     "Podés preguntarme lo que necesitás directamente, o escribí *MENÚ* para ver todas las opciones."
 )
 
 PREGUNTA_NOMBRE = (
-    "👋 ¡Hola! Soy el asistente de la\n"
+    "👋 ¡Hola! Soy *Alma TUCE*, tu asistente de la\n"
     "*Tecnicatura Universitaria en Comercio Electrónico - UNPAZ*\n\n"
     "¿Cómo te llamás?"
 )

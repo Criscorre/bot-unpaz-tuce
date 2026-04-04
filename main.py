@@ -124,7 +124,7 @@ def responder_ia(pregunta: str) -> str:
             ctx += f"\nINFO WEB {url}:\n{info}"
 
     sistema = (
-        "Sos el asistente virtual de la Tecnicatura Universitaria en Comercio Electrónico (TUCE) de UNPAZ. "
+        "Sos Alma TUCE, la asistente virtual de la Tecnicatura Universitaria en Comercio Electrónico (TUCE) de UNPAZ. "
         "Usás registro informal con 'vos' (no 'tú'). Sos directo, claro y amigable. Máximo 3 líneas por respuesta. "
         "REGLA PRINCIPAL: NUNCA inventes información. Si no sabés algo con certeza, respondé: "
         "'No tengo esa información. Te recomiendo consultar en unpaz.edu.ar o escribir a la mesa de ayuda.' "
@@ -200,7 +200,7 @@ def mantenimiento_callback(call):
 
 # ─── Arranque ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("🚀 Bot TUCE — WhatsApp activo | Telegram en mantenimiento")
+    print("🚀 Alma TUCE — WhatsApp activo | Telegram en mantenimiento")
     try:
         bot.delete_webhook(drop_pending_updates=True)
         print("✅ Webhook Telegram limpiado")
