@@ -8,6 +8,8 @@ from openai import OpenAI
 from info_unpaz import DATOS_TECNICATURA
 from materias_db import LISTA_HORARIOS
 from scraper import scrape_todo, obtener_contexto_ia, obtener_novedades_texto, leer_cache
+from datos_carrera import DATA_CALENDARIO, DATA_PLAN, CORRELATIVAS, correlativas_de, DATA_BOT_INFO
+import wa_menu
 from talentos import (
     menu_talentos, iniciar_registro, mostrar_menu_explorar,
     mostrar_talentos_por_categoria, mostrar_perfil_individual,
@@ -45,201 +47,8 @@ def run_health_server():
 
 threading.Thread(target=run_health_server, daemon=True).start()
 
-# ─── Estados conversacionales WhatsApp ───────────────────────────────────────
-# Estructura: { "549XXXXXXXX@s.whatsapp.net": {"modo": "normal"|"horarios"|"ia"} }
-estados_wa = {}
-
-# Menú principal en texto plano (WhatsApp no tiene botones inline)
-MENU_WA = (
-    "👋 *Hola! Soy el Bot TUCE* 🎓\n"
-    "Tu asistente de la Tecnicatura en Comercio Electrónico - UNPAZ\n\n"
-    "Escribí el número de lo que necesitás:\n\n"
-    "1️⃣ 📚 Horarios de materias\n"
-    "2️⃣ 🗓️ Calendario académico\n"
-    "3️⃣ 📍 Sedes UNPAZ\n"
-    "4️⃣ 📄 Plan de estudios\n"
-    "5️⃣ 🔗 Correlativas de una materia\n"
-    "6️⃣ 💬 Consultar a la IA\n"
-    "7️⃣ 📰 Novedades UNPAZ\n"
-    "8️⃣ 🖥️ Gestión Alumnos\n"
-    "9️⃣ 📩 Contactos y Mesa de Ayuda\n"
-    "🔟 📅 Mi Horario Personal\n\n"
-    "_Escribí *menu* en cualquier momento para volver acá._"
-)
-
-def procesar_mensaje_wa(from_id: str, text: str) -> str:
-    """
-    Procesa un mensaje de WhatsApp y devuelve la respuesta en texto plano.
-    Maneja el estado conversacional del usuario.
-    """
-    texto = text.strip().lower()
-    estado = estados_wa.get(from_id, {})
-
-    # Comandos globales que siempre funcionan
-    if texto in ("menu", "inicio", "start", "hola", "buenas", "hey", "0"):
-        estados_wa.pop(from_id, None)
-        return MENU_WA
-
-    # ── Flujo: esperando nombre de materia para horarios ──────────────────────
-    if estado.get("modo") == "horarios":
-        estados_wa.pop(from_id, None)
-        # Buscar coincidencia parcial en LISTA_HORARIOS
-        resultados = [f for f in LISTA_HORARIOS if texto in f[0].lower()]
-        if not resultados:
-            # Intentar con cualquier palabra
-            for palabra in texto.split():
-                resultados = [f for f in LISTA_HORARIOS if palabra in f[0].lower()]
-                if resultados:
-                    break
-        if not resultados:
-            return (
-                f"❌ No encontré horarios para *{text}*.\n\n"
-                "Escribí *horarios* para ver la lista completa, o *menu* para volver."
-            )
-        materia_encontrada = resultados[0][0]
-        cor = correlativas_de(materia_encontrada)
-        resp = f"📍 *{materia_encontrada}*\n"
-        if cor:
-            resp += f"_{cor}_\n"
-        resp += "\n"
-        for f in LISTA_HORARIOS:
-            if f[0] == materia_encontrada:
-                resp += f"👥 Com {f[1]} | 🗓 {f[2]} | ⏰ {f[3][:-3]} a {f[4][:-3]} hs\n"
-                resp += f"🏢 Aula: {f[8]} | 💻 {f[5]}\n"
-                resp += "──────────────\n"
-        resp += "\n_Escribí *menu* para volver._"
-        return resp
-
-    # ── Flujo: esperando nombre de materia para correlativas ──────────────────
-    if estado.get("modo") == "correlativas":
-        estados_wa.pop(from_id, None)
-        # Buscar por nombre parcial en CORRELATIVAS
-        encontrada = None
-        for info in CORRELATIVAS.values():
-            if texto in info["nombre"].lower():
-                encontrada = info
-                break
-        if not encontrada:
-            return (
-                f"❌ No encontré *{text}* en el plan.\n"
-                "Revisá el nombre y probá de nuevo, o escribí *menu*."
-            )
-        nombre = encontrada["nombre"]
-        if not encontrada["necesita"]:
-            return f"✅ *{nombre}*\n\nNo tiene correlativas. ¡Podés cursarla cuando quieras!"
-        previas = "\n".join(
-            f"  • {CORRELATIVAS[c]['nombre']}" for c in encontrada["necesita"]
-        )
-        return (
-            f"🔗 *{nombre}*\n\n"
-            f"Para cursarla necesitás tener aprobada/s:\n{previas}\n\n"
-            "_Escribí *menu* para volver._"
-        )
-
-    # ── Flujo: modo IA activo ─────────────────────────────────────────────────
-    if estado.get("modo") == "ia":
-        return responder_ia(text) + "\n\n_Escribí *menu* para volver al menú._"
-
-    # ── Opciones del menú principal ───────────────────────────────────────────
-    if texto in ("1", "horarios"):
-        materias = sorted(list(set(f[0] for f in LISTA_HORARIOS)))
-        lista = "\n".join(f"  • {m}" for m in materias)
-        estados_wa[from_id] = {"modo": "horarios"}
-        return (
-            f"📚 *Horarios de materias*\n\n"
-            f"Materias disponibles:\n{lista}\n\n"
-            "✏️ *Escribí el nombre (o parte) de la materia que querés ver:*"
-        )
-
-    if texto in ("2", "calendario"):
-        resp = "🗓 *Calendario Académico 2026*\n\n"
-        for k, v in DATA_CALENDARIO.items():
-            resp += v.replace("*", "") + "\n\n"
-        resp += "_Escribí *menu* para volver._"
-        return resp
-
-    if texto in ("3", "sedes"):
-        return (
-            "📍 *Sedes UNPAZ*\n\n"
-            "🏢 *Sede Alem*\n"
-            "Av. Alem 4731, José C. Paz\n"
-            "📌 https://maps.google.com/?q=-34.5164,-58.7615\n\n"
-            "🏢 *Sede Arregui*\n"
-            "Arregui 2080, José C. Paz\n"
-            "📌 https://maps.google.com/?q=-34.5208,-58.7758\n\n"
-            "_Escribí *menu* para volver._"
-        )
-
-    if texto in ("4", "plan"):
-        resp = "📄 *Plan de Estudios TUCE*\n\n"
-        for anio, materias in DATA_PLAN.items():
-            resp += f"*{anio}:*\n"
-            for m in materias:
-                resp += f"  • {m}\n"
-            resp += "\n"
-        resp += "_Escribí *menu* para volver._"
-        return resp
-
-    if texto in ("5", "correlativas"):
-        estados_wa[from_id] = {"modo": "correlativas"}
-        return (
-            "🔗 *Correlativas*\n\n"
-            "Escribí el nombre (o parte) de la materia para ver qué necesitás:\n\n"
-            "_Ejemplo: 'desarrollo web', 'marketing', 'inglés'_"
-        )
-
-    if texto in ("6", "ia", "consultar"):
-        estados_wa[from_id] = {"modo": "ia"}
-        return (
-            "💬 *Modo IA activado*\n\n"
-            "Preguntame lo que necesites sobre la carrera, trámites, becas o UNPAZ.\n"
-            "_Escribí *menu* cuando quieras volver al menú._"
-        )
-
-    if texto in ("7", "novedades"):
-        try:
-            return obtener_novedades_texto(firebase_db) + "\n\n_Escribí *menu* para volver._"
-        except Exception:
-            return "⚠️ No se pudo cargar las novedades. Intentá más tarde.\n\nVisitá: unpaz.edu.ar"
-
-    if texto in ("8", "gestion", "gestión"):
-        return (
-            "🖥️ *Gestión Alumnos*\n\n"
-            "🎓 *Campus Virtual:*\n"
-            "https://campusvirtual.unpaz.edu.ar/\n\n"
-            "🖥️ *SIU Guaraní (inscripciones, certificados, boleto):*\n"
-            "https://estudiantes.unpaz.edu.ar/autogestion/\n\n"
-            "📄 *Equivalencias:*\n"
-            "https://unpaz.edu.ar/formularioequivalencias\n\n"
-            "🌐 *Sitio oficial UNPAZ:*\n"
-            "https://unpaz.edu.ar\n\n"
-            "_Escribí *menu* para volver._"
-        )
-
-    if texto in ("9", "contactos", "ayuda", "mesa"):
-        return (
-            "📩 *Contactos y Mesa de Ayuda*\n\n"
-            "🤝 Acceso y Apoyo:\n  accesoapoyo@unpaz.edu.ar\n\n"
-            "📝 Consultas CIU:\n  ciu@unpaz.edu.ar\n\n"
-            "👤 Consultas Estudiantes:\n  consultasestudiantes@unpaz.edu.ar\n\n"
-            "💻 Soporte SIU Guaraní:\n  soporteinscripciones@unpaz.edu.ar\n\n"
-            "🌐 UNPAZ Virtual:\n  formacionvirtual@unpaz.edu.ar\n\n"
-            "💜 ORVIG (Género):\n  orvig@unpaz.edu.ar\n\n"
-            "_Escribí *menu* para volver._"
-        )
-
-    if texto in ("10", "horario", "mi horario"):
-        from horario_personal import cargar_horario_db, formatear_horario
-        sel = cargar_horario_db(firebase_db, from_id)
-        texto_horario = formatear_horario(sel)
-        return (
-            texto_horario + "\n\n"
-            "💡 _Para configurar o editar tu horario personal, abrí el bot de Telegram._\n\n"
-            "_Escribí *menu* para volver._"
-        )
-
-    # ── Respuesta IA por defecto ──────────────────────────────────────────────
-    return responder_ia(text) + "\n\n_Escribí *menu* para ver las opciones._"
+# WhatsApp: procesamiento delegado a wa_menu.py
+# El estado conversacional y el menú guiado viven en ese módulo.
 
 
 # ─── Webhook Flask para el bridge de WhatsApp ────────────────────────────────
@@ -252,7 +61,7 @@ def webhook_wa():
     message  = data.get("message", "").strip()
     if not from_id or not message:
         return jsonify({"response": ""}), 400
-    respuesta = procesar_mensaje_wa(from_id, message)
+    respuesta = wa_menu.procesar(from_id, message, firebase_db, responder_ia)
     return jsonify({"response": respuesta})
 
 @flask_app.route("/health", methods=["GET"])
@@ -359,87 +168,8 @@ scheduler.start()
 # Primer scraping en background al iniciar (no bloquea el arranque del bot)
 threading.Thread(target=_iniciar_scraper, daemon=True).start()
 
-DATA_CALENDARIO = {
-    "Ingresantes":      "📝 *INFO INGRESANTES:*\n🔹 Inscripción CIU: 06/11 al 28/11/2025\n🔹 Desarrollo CIU: 02/02 al 28/02/2026",
-    "Primer Semestre":  "1️⃣ *1er SEMESTRE 2026:*\n🔹 Inscripción: 18/02 y 19/02\n🔹 Inicio clases: 09/03",
-    "Segundo Semestre": "2️⃣ *2do SEMESTRE 2026:*\n🔹 Inscripción: 22/07 y 23/07\n🔹 Inicio clases: 10/08",
-    "Verano 2027":      "☀️ *VERANO 2027:*\n🔹 Cursada: Febrero 2027"
-}
-DATA_PLAN = {
-    "Primer Año": [
-        "Tecnología y Sociedad (4hs)",
-        "Inglés I (4hs)",
-        "Principios de Economía (4hs)",
-        "Comunicación Institucional (4hs)",
-        "Internet: Infraestructura y redes (4hs)",
-        "Semántica de las interfaces (4hs)",
-        "Introducción al comercio electrónico (4hs)",
-        "Usabilidad, seguridad y Estándares Web (4hs)",
-        "Inglés II (4hs)",
-    ],
-    "Segundo Año": [
-        "Investigación de mercado (4hs)",
-        "Marco legal de negocios electrónicos (4hs)",
-        "Gestión del conocimiento (4hs)",
-        "Desarrollo Web (4hs)",
-        "Formulación, incubación y evaluación de proyectos (4hs)",
-        "Métricas del mundo digital (4hs)",
-        "Desarrollo de Productos y Servicios (4hs)",
-        "Taller de Comunicación (4hs)",
-        "Desarrollos para Dispositivos móviles (4hs)",
-    ],
-    "Tercer Año": [
-        "Calidad y Servicio al Cliente (4hs)",
-        "Marketing digital (4hs)",
-        "Taller de Práctica Integradora (4hs)",
-        "Competencias emprendedoras (4hs)",
-        "Gestión de Proyectos (4hs)",
-    ],
-}
-
-# Correlativas según el plan de estudios oficial (PDF UNPAZ)
-CORRELATIVAS = {
-    "01": {"nombre": "Tecnología y Sociedad",                              "necesita": []},
-    "02": {"nombre": "Inglés I",                                           "necesita": []},
-    "03": {"nombre": "Principios de Economía",                             "necesita": []},
-    "04": {"nombre": "Comunicación Institucional",                         "necesita": []},
-    "05": {"nombre": "Internet: Infraestructura y redes",                  "necesita": []},
-    "06": {"nombre": "Semántica de las interfaces",                        "necesita": []},
-    "07": {"nombre": "Introducción al comercio electrónico",               "necesita": []},
-    "08": {"nombre": "Usabilidad, seguridad y Estándares Web",             "necesita": ["05"]},
-    "09": {"nombre": "Inglés II",                                          "necesita": ["02"]},
-    "10": {"nombre": "Investigación de mercado",                           "necesita": ["03", "07"]},
-    "11": {"nombre": "Marco legal de negocios electrónicos",               "necesita": ["07"]},
-    "12": {"nombre": "Gestión del conocimiento",                           "necesita": ["01"]},
-    "13": {"nombre": "Desarrollo Web",                                     "necesita": ["06", "08"]},
-    "14": {"nombre": "Formulación, incubación y evaluación de proyectos",  "necesita": ["03"]},
-    "15": {"nombre": "Métricas del mundo digital",                         "necesita": []},
-    "16": {"nombre": "Desarrollo de Productos y Servicios",                "necesita": ["10"]},
-    "17": {"nombre": "Taller de Comunicación",                             "necesita": ["04"]},
-    "18": {"nombre": "Desarrollos para Dispositivos móviles",              "necesita": ["13"]},
-    "19": {"nombre": "Calidad y Servicio al Cliente",                      "necesita": ["16"]},
-    "20": {"nombre": "Marketing digital",                                  "necesita": ["17"]},
-    "21": {"nombre": "Taller de Práctica Integradora",                     "necesita": ["16", "17"]},
-    "22": {"nombre": "Competencias emprendedoras",                         "necesita": ["14"]},
-    "23": {"nombre": "Gestión de Proyectos",                               "necesita": ["07", "14"]},
-}
-
-def correlativas_de(nombre_materia: str) -> str:
-    """Devuelve texto con las correlativas de una materia, buscando por nombre."""
-    nombre_lower = nombre_materia.lower()
-    for info in CORRELATIVAS.values():
-        if info["nombre"].lower() == nombre_lower:
-            if not info["necesita"]:
-                return "✅ Sin correlativas"
-            previas = " + ".join(CORRELATIVAS[c]["nombre"] for c in info["necesita"])
-            return f"🔗 Requiere: {previas}"
-    return ""
-DATA_BOT_INFO = {
-    "bot_equivalencias": "⚖️ *Equivalencias:* Trámite formal del 01/04 al 10/04/2026.",
-    "bot_boleto":        "🚌 *Boleto Estudiantil:* Gestión vía SIU Guaraní para alumnos regulares.",
-    "bot_certificados":  "📄 *Certificaciones:* Emisión digital de certificados vía SIU Guaraní.",
-    "bot_inscripcion":   "✍️ *Inscripción:* Únicamente por SIU Guaraní en fechas publicadas."
-}
+# DATA_CALENDARIO, DATA_PLAN, CORRELATIVAS, correlativas_de, DATA_BOT_INFO
+# → importados desde datos_carrera.py (al inicio del archivo)
 URLS_UNPAZ = {
     "tuce":         "https://unpaz.edu.ar/comercioelectronico",
     "becas":        "https://unpaz.edu.ar/bienestar/becas",
@@ -531,12 +261,15 @@ def responder_ia(pregunta):
         except: pass
     sistema = (
         "Sos el Asistente Virtual de la Comunidad TUCE - UNPAZ. "
-        "Respondés SOLO preguntas relacionadas con la UNPAZ, la carrera TUCE, materias, trámites, becas, fechas y vida universitaria. "
-        "Si te preguntan algo que no tiene que ver con la UNPAZ o TUCE, decís amablemente que solo podés ayudar con temas de la carrera. "
+        "REGLA PRINCIPAL: NO inventes información. Si no tenés certeza de algo, decí 'No tengo esa información. "
+        "Te recomiendo consultar en unpaz.edu.ar o escribir a la mesa de ayuda.' "
+        "Respondés SOLO sobre UNPAZ, la carrera TUCE, materias, trámites, becas, fechas y vida universitaria. "
+        "Si te preguntan algo que no tiene que ver con la UNPAZ, decís amablemente que solo podés ayudar con temas de la carrera. "
         "Si te preguntan quién te creó, decís que fuiste desarrollado por Bytes Creativos. "
-        "No decís que sos bot oficial. Respondés en español, claro y amigable. "
-        "Cuando tenés info actualizada de la web de la UNPAZ, la usás para responder con precisión. "
-        "Si no sabés algo con certeza, recomendás unpaz.edu.ar o la mesa de ayuda. "
+        "Respondés en español, claro y breve (máximo 3 líneas). Sin preamble ni relleno. "
+        "Cuando tenés info actualizada de la web de la UNPAZ, la usás. "
+        "Si no sabés, derivás a unpaz.edu.ar o la mesa de ayuda. "
+        "NUNCA respondas sobre política, entretenimiento, tecnología general ni nada ajeno a UNPAZ/TUCE. "
         "Contexto: " + ctx + ctx_web
     )
     try:
