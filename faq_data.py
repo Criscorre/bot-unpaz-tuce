@@ -6,8 +6,8 @@ FAQ = [
         "q": "¿Cuándo empiezan las clases?",
         "a": (
             "📅 *Inicio de clases:*\n"
-            "• 1er semestre: 9 de marzo 2026\n"
-            "• 2do semestre: 10 de agosto 2026"
+            "• 1er trimestre: 9 de marzo 2026\n"
+            "• 2do trimestre: 10 de agosto 2026"
         ),
     },
     {
@@ -15,7 +15,7 @@ FAQ = [
         "a": (
             "✍️ *Inscripción a materias:*\n"
             "Por SIU Guaraní en las fechas publicadas.\n"
-            "https://estudiantes.unpaz.edu.ar/autogestion/"
+            "🔗 https://estudiantes.unpaz.edu.ar/autogestion/"
         ),
     },
     {
@@ -23,14 +23,15 @@ FAQ = [
         "a": (
             "🚌 *Boleto estudiantil:*\n"
             "Gestionalo vía SIU Guaraní siendo alumno regular.\n"
-            "Consultas: soporteinscripciones@unpaz.edu.ar"
+            "Consultas: soporteinscripciones@unpaz.edu.ar\n"
+            "🔗 https://estudiantes.unpaz.edu.ar/autogestion/"
         ),
     },
     {
         "q": "¿Dónde está el campus virtual?",
         "a": (
             "🎓 *Campus virtual:*\n"
-            "https://campusvirtual.unpaz.edu.ar/"
+            "🔗 https://campusvirtual.unpaz.edu.ar/"
         ),
     },
     {
@@ -52,16 +53,21 @@ FAQ = [
     {
         "q": "¿Cuáles son las sedes?",
         "a": (
-            "📍 *Sedes UNPAZ:*\n"
-            "• Sede Alem: Av. Alem 4731, J.C. Paz\n"
-            "• Sede Arregui: Arregui 2080, J.C. Paz"
+            "📍 *Sedes UNPAZ — Campus Alem:*\n"
+            "• CEM (Pueyrredón): Av. Alem 4593\n"
+            "• Sede Alem: Av. Alem 4731\n"
+            "• Biblioteca 'José C. Mondoví': Av. Alem 4673\n"
+            "• Comedor Universitario: Av. Alem 4751\n\n"
+            "📍 *Campus Arregui:*\n"
+            "• Sede Arregui: Av. Arregui 501"
         ),
     },
     {
         "q": "¿Cuánto dura la carrera?",
         "a": (
-            "🎓 *Duración:* 3 años (6 cuatrimestres)\n"
-            "Título: Técnico/a Universitario/a en Comercio Electrónico."
+            "🎓 *Duración:* 3 años (6 trimestres)\n"
+            "Modalidad: Presencial con contenido virtual.\n"
+            "Título: Técnica/o Universitaria/o en Comercio Electrónico."
         ),
     },
     {
@@ -69,15 +75,20 @@ FAQ = [
         "a": (
             "📄 *Certificados:*\n"
             "Se emiten de forma digital vía SIU Guaraní.\n"
-            "https://estudiantes.unpaz.edu.ar/autogestion/"
+            "🔗 https://estudiantes.unpaz.edu.ar/autogestion/"
         ),
     },
     {
         "q": "¿Tiene salida laboral la carrera?",
         "a": (
-            "💼 *Salida laboral:*\n"
-            "Marketing digital, e-commerce, desarrollo web, emprendimiento digital y consultoría online.\n"
-            "https://unpaz.edu.ar/comercioelectronico"
+            "💼 *Salida laboral TUCE:*\n"
+            "• Marketing digital y e-commerce\n"
+            "• Gestión de tiendas online\n"
+            "• Estrategia web y SEO\n"
+            "• Emprendimiento digital\n"
+            "• Consultoría en negocios online\n"
+            "• CEO de emprendimientos propios\n"
+            "🔗 https://unpaz.edu.ar/comercioelectronico"
         ),
     },
     {
@@ -91,10 +102,37 @@ FAQ = [
     {
         "q": "¿Qué es el SIU Guaraní?",
         "a": (
-            "🖥️ *SIU Guaraní:*\n"
-            "El sistema de gestión académica de UNPAZ.\n"
-            "Desde ahí tramitás inscripciones, certificados y boleto estudiantil.\n"
-            "https://estudiantes.unpaz.edu.ar/autogestion/"
+            "🖥️ *SIU Guaraní — gestión académica:*\n"
+            "🔗 https://estudiantes.unpaz.edu.ar/autogestion/\n\n"
+            "Desde ahí podés:\n"
+            "• Inscribirte a exámenes y materias\n"
+            "• Ver tu historia académica e inasistencias\n"
+            "• Consultar tu plan de estudios y avance\n"
+            "• Tramitar constancias y certificados\n"
+            "• Solicitar el boleto estudiantil\n"
+            "• Actualizar tus datos personales\n"
+            "• Iniciar trámites de título y preinscripción"
+        ),
+    },
+    {
+        "q": "¿Cómo llego a UNPAZ?",
+        "a": (
+            "🗺️ *Cómo llegar al Campus Alem (sede principal):*\n\n"
+            "🚗 Desde Acceso Oeste:\n"
+            "Ruta 24 (ex 197) → Sarmiento → José C. Paz → Av. Alem\n\n"
+            "🚗 Desde Panamericana:\n"
+            "Ruta 24 → Av. Perón → José C. Paz → Av. Alem\n\n"
+            "🚶 A pie/tren:\n"
+            "Estación José C. Paz → Ruta 24 → Av. Alem\n\n"
+            "Para indicaciones personalizadas escribí: *¿cómo llego desde [tu ubicación]?*"
+        ),
+    },
+    {
+        "q": "¿Quién es el director de la carrera?",
+        "a": (
+            "👤 *Director de la TUCE:*\n"
+            "Fernando Fiorenzo\n"
+            "🔗 https://www.linkedin.com/in/fernando-fiorenzo-0a47841a/"
         ),
     },
 ]

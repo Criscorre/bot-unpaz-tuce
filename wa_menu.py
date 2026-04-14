@@ -1,29 +1,53 @@
-# wa_menu.py — Handler WhatsApp v4
+# wa_menu.py — Handler WhatsApp v5
 #
 # Filosofía:
 #   - Si el usuario pregunta algo y tenemos la respuesta, la damos directo.
 #   - El menú guía pero no bloquea.
+#   - La IA trabaja en segundo plano como fallback — no es visible en el menú.
 #   - Tono: registro "vos", informal pero respetuoso, consistente.
 #   - Todas las respuestas terminan con MENÚ · ATRÁS · CERRAR.
-#   - El bot recuerda el nombre del usuario (Firebase).
+#   - El bot siempre pide el nombre al primer contacto y lo recuerda.
 
 from normalizer import normalizar, es_menu, extraer_numero, contiene_alguna
 import estado as est
 from materias_db import LISTA_HORARIOS
 from faq_data import FAQ
-from datos_carrera import DATA_PLAN, DATA_CALENDARIO, CORRELATIVAS, correlativas_de
+from datos_carrera import (
+    DATA_PLAN, DATA_CALENDARIO, CORRELATIVAS, correlativas_de,
+    DATA_CARRERA_INFO, DATA_DIRECTOR, DATA_COMO_LLEGAR,
+)
 
 # ─── Sedes ────────────────────────────────────────────────────────────────────
 SEDES = {
+    "cem": {
+        "nombre":    "CEM — Sede Pueyrredón",
+        "direccion": "Leandro N. Alem 4593, José C. Paz, Buenos Aires",
+        "maps":      "https://maps.google.com/?q=Leandro+N.+Alem+4593,+Jose+C.+Paz,+Buenos+Aires",
+        "extra":     None,
+    },
     "alem": {
         "nombre":    "Sede Alem",
         "direccion": "Leandro N. Alem 4731, José C. Paz, Buenos Aires",
         "maps":      "https://maps.google.com/?q=Leandro+N.+Alem+4731,+Jose+C.+Paz,+Buenos+Aires",
+        "extra":     None,
+    },
+    "biblioteca": {
+        "nombre":    "Biblioteca 'José C. Mondoví'",
+        "direccion": "Leandro N. Alem 4673, José C. Paz, Buenos Aires",
+        "maps":      "https://maps.google.com/?q=Leandro+N.+Alem+4673,+Jose+C.+Paz,+Buenos+Aires",
+        "extra":     "🎬 Sala Multimedial en el 1er piso",
+    },
+    "comedor": {
+        "nombre":    "Comedor Universitario",
+        "direccion": "Leandro N. Alem 4751, José C. Paz, Buenos Aires",
+        "maps":      "https://maps.google.com/?q=Leandro+N.+Alem+4751,+Jose+C.+Paz,+Buenos+Aires",
+        "extra":     None,
     },
     "arregui": {
-        "nombre":    "Sede Arregui",
+        "nombre":    "Campus Arregui",
         "direccion": "Av. Héctor Arregui 501, José C. Paz, Buenos Aires",
         "maps":      "https://maps.google.com/?q=Av.+Hector+Arregui+501,+Jose+C.+Paz,+Buenos+Aires",
+        "extra":     None,
     },
 }
 
@@ -37,7 +61,6 @@ _MATERIAS = sorted(list(set(f[0] for f in LISTA_HORARIOS)))
 _FOOTER = "\n\n*MENÚ* · *ATRÁS* · *CERRAR*"
 
 def _pie(extra: str = "") -> str:
-    """Devuelve el pie estándar con navegación."""
     if extra:
         return f"\n\n_{extra}_" + _FOOTER
     return _FOOTER
@@ -61,8 +84,7 @@ MENU_TEXTO = (
     "2️⃣  🕒 Horarios del trimestre\n"
     "3️⃣  👥 Comunidad TUCE\n"
     "4️⃣  ❓ Preguntas frecuentes\n"
-    "5️⃣  📍 Sedes UNPAZ\n"
-    "6️⃣  🤖 Consultar a la IA\n\n"
+    "5️⃣  📍 Sedes UNPAZ\n\n"
     "_Escribí el número, el nombre de la opción, o preguntame directamente._"
     + _FOOTER
 )
@@ -73,14 +95,11 @@ MSG_NO_ENTENDI = (
     + _FOOTER
 )
 
-MSG_CERRAR = (
-    "👋 ¡Hasta luego{nombre}! Cuando necesites algo, acá estoy. 😊"
-)
+MSG_CERRAR = "👋 ¡Hasta luego{nombre}! Cuando necesités algo, acá estoy. 😊"
 
 # ─── Firebase: memoria de nombre ─────────────────────────────────────────────
 
 def _esc_uid(uid: str) -> str:
-    """Escapa caracteres inválidos para claves de Firebase (. @ +)."""
     return uid.replace(".", "___DOT___").replace("@", "___AT___").replace("+", "___PLUS___")
 
 def _get_nombre(firebase_db, uid: str) -> str | None:
@@ -91,14 +110,13 @@ def _get_nombre(firebase_db, uid: str) -> str | None:
 
 def _set_nombre(firebase_db, uid: str, nombre: str):
     try:
-        firebase_db.reference(f"wa_usuarios/{_esc_uid(uid)}").set({"nombre": nombre.strip().capitalize()})
+        firebase_db.reference(f"wa_usuarios/{_esc_uid(uid)}").update({"nombre": nombre.strip().capitalize()})
     except:
         pass
 
 # ─── Búsqueda de materias ─────────────────────────────────────────────────────
 
 def _buscar_materia_activa(texto_norm: str) -> str | None:
-    """Busca en las materias activas del trimestre (LISTA_HORARIOS)."""
     num = extraer_numero(texto_norm)
     if num is not None and 1 <= num <= len(_MATERIAS):
         return _MATERIAS[num - 1]
@@ -119,7 +137,6 @@ def _buscar_materia_activa(texto_norm: str) -> str | None:
     return None
 
 def _buscar_en_correlativas(texto_norm: str) -> dict | None:
-    """Busca en TODAS las materias del plan (incluye las que no están activas)."""
     for info in CORRELATIVAS.values():
         if texto_norm == normalizar(info["nombre"]):
             return info
@@ -171,6 +188,23 @@ def _txt_plan() -> str:
     resp += "🔗 https://unpaz.edu.ar/comercioelectronico"
     return resp + _pie()
 
+def _txt_carrera_desc() -> str:
+    info = DATA_CARRERA_INFO
+    resp = (
+        f"🎓 *{info['titulo']}*\n\n"
+        f"⏱️ Duración: {info['duracion']}\n"
+        f"📍 Modalidad: {info['modalidad']}\n\n"
+        f"📖 *Descripción:*\n{info['descripcion']}\n\n"
+        "✅ *Lo que vas a poder hacer:*\n"
+    )
+    for item in info["perfil_egresado"]:
+        resp += f"  • {item}\n"
+    resp += "\n💼 *Salidas laborales:*\n"
+    for item in info["alcance"]:
+        resp += f"  • {item}\n"
+    resp += "\n🔗 https://unpaz.edu.ar/comercioelectronico"
+    return resp + _pie()
+
 def _txt_calendario() -> str:
     resp = "🗓️ *Calendario Académico 2026*\n\n"
     for v in DATA_CALENDARIO.values():
@@ -180,17 +214,33 @@ def _txt_calendario() -> str:
 
 def _txt_gestion() -> str:
     return (
-        "🖥️ *Gestión Alumnos:*\n\n"
+        "🖥️ *Gestión Alumnos — SIU Guaraní:*\n\n"
+        "🔗 https://estudiantes.unpaz.edu.ar/autogestion/\n\n"
+        "Desde ahí podés:\n"
+        "  • Inscribirte a exámenes y materias\n"
+        "  • Ver tu historia académica e inasistencias\n"
+        "  • Consultar tu plan y avance\n"
+        "  • Tramitar constancias y certificados\n"
+        "  • Solicitar el boleto estudiantil\n"
+        "  • Actualizar datos personales\n\n"
         "🎓 Campus Virtual:\nhttps://campusvirtual.unpaz.edu.ar/\n\n"
-        "🖥️ SIU Guaraní (inscripciones, certificados, boleto):\nhttps://estudiantes.unpaz.edu.ar/autogestion/\n\n"
         "📄 Equivalencias:\nhttps://unpaz.edu.ar/formularioequivalencias\n\n"
         "🌐 Sitio oficial:\nhttps://unpaz.edu.ar"
     ) + _pie()
 
 def _txt_sedes() -> str:
-    resp = "📍 *Sedes UNPAZ:*\n\n"
-    for s in SEDES.values():
-        resp += f"🏢 *{s['nombre']}*\n{s['direccion']}\n{s['maps']}\n\n"
+    resp = "📍 *Sedes UNPAZ — Campus Alem:*\n\n"
+    for key in ["cem", "biblioteca", "comedor", "alem"]:
+        s = SEDES[key]
+        resp += f"🏢 *{s['nombre']}*\n{s['direccion']}\n{s['maps']}"
+        if s.get("extra"):
+            resp += f"\n_{s['extra']}_"
+        resp += "\n\n"
+    resp += "──────────\n"
+    resp += "📍 *Campus Arregui:*\n\n"
+    s = SEDES["arregui"]
+    resp += f"🏢 *{s['nombre']}*\n{s['direccion']}\n{s['maps']}\n\n"
+    resp += "_Escribí *cómo llego* para obtener indicaciones personalizadas._"
     return resp + _pie()
 
 def _txt_contactos() -> str:
@@ -218,6 +268,31 @@ def _txt_comunidad() -> str:
         "▶️ *YouTube:*\nhttps://www.youtube.com/@TUCEUNPAZ"
     ) + _pie()
 
+# ─── Cómo llegar ─────────────────────────────────────────────────────────────
+
+def _txt_como_llegar(sede: str, origen: str) -> str:
+    data = DATA_COMO_LLEGAR.get(sede)
+    if not data:
+        return _txt_como_llegar_todo()
+    return (
+        f"🗺️ *Cómo llegar a {data['nombre']}*\n\n"
+        + data.get(origen, data["a_pie"])
+    ) + _pie("Escribí MENÚ para más opciones")
+
+def _txt_como_llegar_todo() -> str:
+    resp = "🗺️ *Cómo llegar a UNPAZ — Campus Alem:*\n\n"
+    d = DATA_COMO_LLEGAR["alem"]
+    resp += d["desde_acceso_oeste"] + "\n\n"
+    resp += d["desde_panamericana"] + "\n\n"
+    resp += d["a_pie"] + "\n\n"
+    resp += "──────────\n"
+    resp += "🗺️ *Campus Arregui:*\n\n"
+    d2 = DATA_COMO_LLEGAR["arregui"]
+    resp += d2["desde_acceso_oeste"] + "\n\n"
+    resp += d2["desde_panamericana"] + "\n\n"
+    resp += d2["a_pie"]
+    return resp + _pie()
+
 # ─── FAQ ──────────────────────────────────────────────────────────────────────
 
 def _txt_lista_faq() -> str:
@@ -244,20 +319,20 @@ def _buscar_faq(texto_norm: str) -> dict | None:
 
 SUBMENU_CARRERA = (
     "📚 *Información de la carrera:*\n\n"
-    "1. 📄 Plan de estudios\n"
-    "2. 🔗 Correlativas\n"
-    "3. 🗓️ Calendario académico\n"
-    "4. 🖥️ Gestión (Campus / SIU Guaraní)\n"
-    "5. 📍 Sedes\n"
+    "1. 📖 Descripción y perfil egresado\n"
+    "2. 📄 Plan de estudios\n"
+    "3. 🔗 Correlativas\n"
+    "4. 🗓️ Calendario académico\n"
+    "5. 🖥️ Gestión (Campus / SIU Guaraní)\n"
     "6. 📩 Contactos y Mesa de Ayuda"
 ) + _pie("Escribí el número de la opción")
 
 _KEYWORDS_CARRERA = {
-    1: ["plan", "estudio", "materias de la carrera", "que se estudia"],
-    2: ["correlativa", "previa", "requiere", "para cursar", "necesito tener"],
-    3: ["calendario", "fecha", "cuando empiezan", "inicio", "semestre", "trimestre"],
-    4: ["gestion", "campus", "guarani", "siu", "certificado", "boleto", "equivalencia"],
-    5: ["sede", "donde", "direccion", "como llego"],
+    1: ["descripcion", "perfil", "egresado", "que es la tuce", "para que sirve", "salida laboral"],
+    2: ["plan", "estudio", "materias de la carrera", "que se estudia"],
+    3: ["correlativa", "previa", "requiere", "para cursar", "necesito tener"],
+    4: ["calendario", "fecha", "cuando empiezan", "inicio", "trimestre"],
+    5: ["gestion", "campus", "guarani", "siu", "certificado", "boleto", "equivalencia"],
     6: ["contacto", "ayuda", "mail", "email", "beca", "pasantia", "orvig"],
 }
 
@@ -268,7 +343,7 @@ def _handle_carrera(uid: str, texto_norm: str) -> str:
     if esperando == "correlativa":
         info = _buscar_en_correlativas(texto_norm)
         if info:
-            est.avanzar(uid, esperando="correlativa")  # permanecer para más consultas
+            est.avanzar(uid, esperando="correlativa")
             nombre = info["nombre"]
             if not info["necesita"]:
                 return (
@@ -289,11 +364,11 @@ def _handle_carrera(uid: str, texto_norm: str) -> str:
         ) + _FOOTER
 
     _MAP = {
-        1: (None,          _txt_plan),
-        2: ("correlativa", lambda: "🔗 *Correlativas*\n\nEscribí el nombre (o parte) de la materia:" + _pie("Ejemplo: 'marketing', 'ingles', 'desarrollo web'")),
-        3: (None,          _txt_calendario),
-        4: (None,          _txt_gestion),
-        5: (None,          _txt_sedes),
+        1: (None,          _txt_carrera_desc),
+        2: (None,          _txt_plan),
+        3: ("correlativa", lambda: "🔗 *Correlativas*\n\nEscribí el nombre (o parte) de la materia:" + _pie("Ejemplo: 'marketing', 'ingles', 'desarrollo web'")),
+        4: (None,          _txt_calendario),
+        5: (None,          _txt_gestion),
         6: (None,          _txt_contactos),
     }
 
@@ -317,7 +392,7 @@ def _handle_carrera(uid: str, texto_norm: str) -> str:
 def _handle_horarios(uid: str, texto_norm: str) -> str:
     materia = _buscar_materia_activa(texto_norm)
     if materia:
-        est.avanzar(uid, esperando="materia")  # permanece en horarios para más consultas
+        est.avanzar(uid, esperando="materia")
         return _txt_horario_materia(materia)
     if est.sumar_error(uid):
         est.salir(uid)
@@ -330,25 +405,60 @@ def _handle_horarios(uid: str, texto_norm: str) -> str:
 def _handle_faq(uid: str, texto_norm: str) -> str:
     item = _buscar_faq(texto_norm)
     if item:
-        est.avanzar(uid, esperando="faq")  # permanece para más consultas
+        est.avanzar(uid, esperando="faq")
         return item["a"] + _pie("Escribí otro número para seguir consultando")
     if est.sumar_error(uid):
         est.salir(uid)
         return "⚠️ Demasiados intentos.\n\n" + MENU_TEXTO
     return "❌ No encontré esa pregunta.\n\n" + _txt_lista_faq()
 
+# ─── Cómo llegar: estado inteligente ─────────────────────────────────────────
+
+def _handle_viaje(uid: str, texto_norm: str) -> str:
+    estado    = est.get(uid)
+    esperando = estado.get("esperando")
+
+    if esperando == "origen_viaje":
+        # Detectar sede destino
+        sede = "arregui" if "arregui" in texto_norm else "alem"
+
+        # Detectar origen
+        if contiene_alguna(texto_norm, ["acceso", "oeste", "moron", "merlo", "moreno", "ituzaingo", "haedo"]):
+            origen = "desde_acceso_oeste"
+        elif contiene_alguna(texto_norm, ["panamericana", "norte", "tigre", "pilar", "zona norte", "palermo", "capital", "caba"]):
+            origen = "desde_panamericana"
+        elif contiene_alguna(texto_norm, ["pie", "tren", "estacion", "caminando", "colectivo"]):
+            origen = "a_pie"
+        else:
+            # No detectamos origen → mostrar las tres opciones
+            est.salir(uid)
+            return _txt_como_llegar_todo()
+
+        est.salir(uid)
+        return _txt_como_llegar(sede, origen)
+
+    # Primera vez: preguntar desde dónde
+    est.entrar(uid, "viaje", esperando="origen_viaje")
+    return (
+        "🗺️ *¿Cómo llego a UNPAZ?*\n\n"
+        "Para darte las indicaciones más precisas, ¿desde dónde venís?\n\n"
+        "_Ejemplo: 'Acceso Oeste', 'Panamericana', 'José C. Paz a pie'_"
+    ) + _FOOTER
+
 # ─── Respuesta directa por intención ─────────────────────────────────────────
 
 _KW_HORARIO     = ["horario", "cuando cursa", "que dia", "aula de", "comision de"]
 _KW_CORRELATIVA = ["correlativa", "requiere", "necesito tener", "previa", "para cursar"]
-_KW_SEDE        = ["sede", "donde queda", "donde esta", "direccion", "como llego"]
+_KW_SEDE        = ["sede", "donde queda", "donde esta", "direccion", "edificio"]
+_KW_LLEGAR      = ["como llego", "como llegar", "como ir a", "como voy", "indicaciones"]
 _KW_CALENDARIO  = ["calendario", "cuando empiezan", "inicio de clases", "inscripcion al trimestre"]
 _KW_PLAN        = ["plan de estudio", "materias de la carrera", "que materias hay", "cuantos anos dura"]
 _KW_COMUNIDAD   = ["grupo de whatsapp", "instagram", "facebook", "comunidad tuce", "redes sociales"]
 _KW_GESTION     = ["campus virtual", "guarani", "siu guarani", "certificado de alumno", "boleto estudiantil", "equivalencias"]
 _KW_CONTACTO    = ["mesa de ayuda", "correo de", "email de", "contacto de", "beca", "pasantia"]
+_KW_CARRERA_DESC = ["que es la tuce", "de que trata", "perfil del egresado", "para que sirve", "descripcion de la carrera"]
 
-def _respuesta_directa(texto_norm: str, texto_original: str) -> str | None:
+def _respuesta_directa(uid: str, texto_norm: str, texto_original: str) -> str | None:
     # Materia específica mencionada por nombre
     materia = _buscar_materia_activa(texto_norm)
     if materia and not contiene_alguna(texto_norm, ["correlativa", "previa", "requiere"]):
@@ -370,10 +480,10 @@ def _respuesta_directa(texto_norm: str, texto_original: str) -> str | None:
             return _txt_horario_materia(materia)
         return _txt_lista_materias()
 
+    if contiene_alguna(texto_norm, _KW_LLEGAR):
+        return _handle_viaje(uid, texto_norm)
+
     if contiene_alguna(texto_norm, _KW_SEDE):
-        if "alem" in texto_norm:
-            s = SEDES["alem"]
-            return f"📍 *{s['nombre']}*\n{s['direccion']}\n{s['maps']}" + _pie()
         if "arregui" in texto_norm:
             s = SEDES["arregui"]
             return f"📍 *{s['nombre']}*\n{s['direccion']}\n{s['maps']}" + _pie()
@@ -381,6 +491,9 @@ def _respuesta_directa(texto_norm: str, texto_original: str) -> str | None:
 
     if contiene_alguna(texto_norm, _KW_CALENDARIO):
         return _txt_calendario()
+
+    if contiene_alguna(texto_norm, _KW_CARRERA_DESC):
+        return _txt_carrera_desc()
 
     if contiene_alguna(texto_norm, _KW_PLAN):
         return _txt_plan()
@@ -414,12 +527,11 @@ def _log(firebase_db, seccion: str):
 # ─── Función principal ────────────────────────────────────────────────────────
 
 _KEYWORDS_OPCION = {
-    1: ["informacion de la carrera", "info carrera", "plan de estudio"],
+    1: ["informacion de la carrera", "info carrera", "plan de estudio", "sobre la carrera"],
     2: ["horarios del trimestre", "horario de materias", "ver horarios", "materias disponibles"],
     3: ["comunidad tuce", "grupo de whatsapp", "redes sociales"],
     4: ["preguntas frecuentes", "faq", "dudas frecuentes"],
     5: ["sedes unpaz", "ver sedes", "donde queda unpaz"],
-    6: ["consultar ia", "hablar con ia", "modo ia"],
 }
 
 def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
@@ -427,7 +539,6 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
     nombre_db  = _get_nombre(firebase_db, from_id)
     saludo     = f", {nombre_db}" if nombre_db else ""
 
-    # ── Estado actual ─────────────────────────────────────────────────────────
     estado  = est.get(from_id)
     seccion = estado.get("seccion")
 
@@ -443,7 +554,6 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
         return MSG_CERRAR.format(nombre=saludo)
 
     if texto_norm in ("atras", "volver", "anterior"):
-        # Si estamos en correlativas, volvemos al submenú de carrera
         if seccion == "carrera" and estado.get("esperando") == "correlativa":
             est.entrar(from_id, "carrera")
             return SUBMENU_CARRERA
@@ -456,6 +566,7 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
             return _txt_lista_faq()
         return MENU_TEXTO
 
+    # ── Flujo de registro de nombre ───────────────────────────────────────────
     if seccion == "esperando_nombre":
         nombre_ingresado = texto.strip().split()[0].capitalize()
         _set_nombre(firebase_db, from_id, nombre_ingresado)
@@ -476,11 +587,10 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
     if seccion == "faq":
         return _handle_faq(from_id, texto_norm)
 
-    if seccion == "ia":
-        _log(firebase_db, "ia")
-        return responder_ia_fn(texto) + _pie("Seguí preguntando o escribí MENÚ para más opciones")
+    if seccion == "viaje":
+        return _handle_viaje(from_id, texto_norm)
 
-    # ── Sin estado: primero opciones numeradas del menú ───────────────────────
+    # ── Sin estado: opciones numeradas del menú (5 opciones) ─────────────────
     num = extraer_numero(texto_norm)
     if num is None:
         for n, kws in _KEYWORDS_OPCION.items():
@@ -511,18 +621,10 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
         _log(firebase_db, "sedes")
         return _txt_sedes()
 
-    if num == 6:
-        est.entrar(from_id, "ia")
-        _log(firebase_db, "ia_activado")
-        return (
-            "🤖 *Modo IA activado*\n\n"
-            "Preguntame sobre la TUCE, trámites, becas o UNPAZ.\n"
-            "_No respondo sobre horarios ni aulas — para eso usá la opción 2._"
-        ) + _pie()
-
-    # ── Respuestas especiales antes del fallback ──────────────────────────────
-    # Quién te creó / quién sos
-    if contiene_alguna(texto_norm, ["quien te creo", "quien te hizo", "quien te desarrollo", "bytes creativos", "quien sos", "como te llamas", "cual es tu nombre"]):
+    # ── Identidad del bot ─────────────────────────────────────────────────────
+    if contiene_alguna(texto_norm, ["quien te creo", "quien te hizo", "quien te desarrollo",
+                                     "bytes creativos", "quien sos", "como te llamas",
+                                     "cual es tu nombre", "quien es tu creador"]):
         return (
             "Soy *Alma TUCE* 🎓\n\n"
             "Fui desarrollada por *Bytes Creativos*, agencia de marketing y soluciones digitales nacida en la UNPAZ.\n"
@@ -530,8 +632,17 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
             "📸 @bytescreativoss"
         ) + _pie()
 
+    # ── Director de la carrera ────────────────────────────────────────────────
+    if contiene_alguna(texto_norm, ["director", "fiorenzo", "quien dirige", "coordinador"]):
+        d = DATA_DIRECTOR
+        return (
+            f"👤 *{d['cargo']}:*\n\n"
+            f"{d['nombre']}\n"
+            f"🔗 {d['linkedin']}"
+        ) + _pie()
+
     # ── Texto libre: respuesta directa por intención ──────────────────────────
-    directa = _respuesta_directa(texto_norm, texto)
+    directa = _respuesta_directa(from_id, texto_norm, texto)
     if directa:
         _log(firebase_db, "directa")
         return directa
@@ -542,6 +653,6 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
         _log(firebase_db, "bienvenida")
         return PREGUNTA_NOMBRE
 
-    # ── No entendí ────────────────────────────────────────────────────────────
-    _log(firebase_db, "fallback")
-    return MSG_NO_ENTENDI
+    # ── Fallback: IA interna (transparente para el usuario) ───────────────────
+    _log(firebase_db, "ia_fallback")
+    return responder_ia_fn(texto, from_id) + _pie("Seguí preguntando o escribí MENÚ para más opciones")

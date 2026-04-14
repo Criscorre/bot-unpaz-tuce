@@ -1,5 +1,5 @@
 # datos_carrera.py — Datos estáticos de la carrera TUCE
-# Fuente única de verdad para plan, correlativas y calendario.
+# Fuente única de verdad para plan, correlativas, calendario, director y cómo llegar.
 # Actualizar acá cuando cambien los datos; el resto del código los importa.
 
 DATA_CALENDARIO = {
@@ -78,7 +78,85 @@ def correlativas_de(nombre_materia: str) -> str:
             return f"🔗 Requiere: {previas}"
     return ""
 
-# Usado en los callbacks de Telegram para el Bot TUCE (equivalencias, boleto, etc.)
+# ─── Descripción de la carrera ────────────────────────────────────────────────
+DATA_CARRERA_INFO = {
+    "titulo":    "TÉCNICA/O UNIVERSITARIA/O EN COMERCIO ELECTRÓNICO",
+    "duracion":  "3 años (6 trimestres)",
+    "modalidad": "Presencial con contenido virtual",
+    "descripcion": (
+        "La/el Técnica/o Universitaria/o en Comercio Electrónico podrá participar "
+        "de toda la actividad relacionada con la presencia y la venta en línea en "
+        "cualquier tipo de organización. Su formación le permitirá interactuar con "
+        "los equipos de desarrollo, diseño y producción, así como gestionar sus propios "
+        "proyectos. Podrá montar y administrar una tienda en línea y construir productos "
+        "y servicios para diversos canales de venta."
+    ),
+    "alcance": [
+        "Desarrollo de canales de venta digital",
+        "Estrategias de comercialización",
+        "Trabajo en empresas, PyMES y organizaciones sociales",
+        "Desarrollo de negocio propio",
+    ],
+    "titulo_alcance": [
+        "Colaborar o desarrollar sectores de venta online",
+        "Estrategia web",
+        "Campañas de marketing",
+        "Planes de negocio",
+    ],
+    "perfil_egresado": [
+        "Crear tiendas online",
+        "Definir métricas y KPIs",
+        "Elaborar planes comerciales",
+        "Gestionar contenido web y SEO",
+        "Administrar productos y promociones",
+        "Ejecutar campañas de marketing y comunicación",
+        "Desarrollar planes de inversión",
+        "Impulsar proyectos emprendedores propios",
+    ],
+}
+
+# ─── Director de la carrera ───────────────────────────────────────────────────
+DATA_DIRECTOR = {
+    "nombre":   "Fernando Fiorenzo",
+    "cargo":    "Director de la carrera TUCE",
+    "linkedin": "https://www.linkedin.com/in/fernando-fiorenzo-0a47841a/",
+}
+
+# ─── Cómo llegar ─────────────────────────────────────────────────────────────
+DATA_COMO_LLEGAR = {
+    "alem": {
+        "nombre":             "Campus Alem (sede principal)",
+        "desde_acceso_oeste": (
+            "🚗 *Desde Acceso Oeste:*\n"
+            "Tomá Ruta 24 (ex 197) → Girá en Sarmiento → José C. Paz → Av. Alem"
+        ),
+        "desde_panamericana": (
+            "🚗 *Desde Panamericana:*\n"
+            "Tomá Ruta 24 → Av. Perón → José C. Paz → Av. Alem"
+        ),
+        "a_pie": (
+            "🚶 *A pie / tren:*\n"
+            "Bajá en estación José C. Paz → Tomá Ruta 24 → Dirección Av. Alem"
+        ),
+    },
+    "arregui": {
+        "nombre":             "Campus Arregui",
+        "desde_acceso_oeste": (
+            "🚗 *Desde Acceso Oeste:*\n"
+            "Ruta 197 → Chacabuco → Piñero → Av. Arregui"
+        ),
+        "desde_panamericana": (
+            "🚗 *Desde Panamericana:*\n"
+            "Ruta 197 → Félix Iglesias → Oribe → Av. Arregui"
+        ),
+        "a_pie": (
+            "🚶 *A pie:*\n"
+            "Bajá en estación José C. Paz → Ruta 197 → Rivadavia → Girondo → Arregui"
+        ),
+    },
+}
+
+# ─── Info de gestión / SIU ────────────────────────────────────────────────────
 DATA_BOT_INFO = {
     "bot_equivalencias": "⚖️ *Equivalencias:* Trámite formal del 01/04 al 10/04/2026.",
     "bot_boleto":        "🚌 *Boleto Estudiantil:* Gestión vía SIU Guaraní para alumnos regulares.",
