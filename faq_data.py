@@ -120,14 +120,14 @@ FAQ = [
     {
         "q": "¿Cómo llego a UNPAZ?",
         "a": (
-            "🗺️ *Cómo llegar al Campus Alem (sede principal):*\n\n"
-            "🚗 Desde Acceso Oeste:\n"
-            "Ruta 24 (ex 197) → Sarmiento → José C. Paz → Av. Alem\n\n"
-            "🚗 Desde Panamericana:\n"
-            "Ruta 24 → Av. Perón → José C. Paz → Av. Alem\n\n"
-            "🚶 A pie/tren:\n"
-            "Estación José C. Paz → Ruta 24 → Av. Alem\n\n"
-            "Para indicaciones personalizadas escribí: *¿cómo llego desde [tu ubicación]?*"
+            "🗺️ *Cómo llegar a UNPAZ — Campus Alem:*\n\n"
+            "Tocá el link según tu medio de transporte y Maps te guía desde donde estás 👇\n\n"
+            "🚌 Colectivo / tren:\n"
+            "https://www.google.com/maps/dir/?api=1&destination=Leandro+N.+Alem+4731,+Jose+C.+Paz,+Buenos+Aires&travelmode=transit\n\n"
+            "🚗 Auto / moto:\n"
+            "https://www.google.com/maps/dir/?api=1&destination=Leandro+N.+Alem+4731,+Jose+C.+Paz,+Buenos+Aires&travelmode=driving\n\n"
+            "🚶 A pie:\n"
+            "https://www.google.com/maps/dir/?api=1&destination=Leandro+N.+Alem+4731,+Jose+C.+Paz,+Buenos+Aires&travelmode=walking"
         ),
     },
     {

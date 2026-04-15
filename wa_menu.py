@@ -287,29 +287,65 @@ def _txt_comunidad() -> str:
         "▶️ *YouTube:*\nhttps://www.youtube.com/@TUCEUNPAZ"
     ) + _pie()
 
-# ─── Cómo llegar ─────────────────────────────────────────────────────────────
+# ─── Cómo llegar — Links Google Maps automáticos ────────────────────────────
 
-def _txt_como_llegar(sede: str, origen: str) -> str:
-    data = DATA_COMO_LLEGAR.get(sede)
-    if not data:
-        return _txt_como_llegar_todo()
+_MAPS_BASE = "https://www.google.com/maps/dir/?api=1"
+
+_MAPS_DEST = {
+    "alem":    "Leandro+N.+Alem+4731,+Jose+C.+Paz,+Buenos+Aires",
+    "arregui": "Av.+Hector+Arregui+501,+Jose+C.+Paz,+Buenos+Aires",
+}
+
+_MODO_KEYWORDS = {
+    "transit":  ["colectivo", "micro", "tren", "transporte", "publico", "subte", "omnibus", "combi"],
+    "driving":  ["auto", "carro", "moto", "conduciendo", "manejando", "uber", "remis", "taxi"],
+    "walking":  ["pie", "caminando", "camino"],
+}
+
+_MODO_EMOJI = {
+    "transit": "🚌",
+    "driving": "🚗",
+    "walking": "🚶",
+}
+
+_MODO_NOMBRE = {
+    "transit": "transporte público",
+    "driving": "en auto",
+    "walking": "a pie",
+}
+
+def _detectar_modo(texto_norm: str) -> str:
+    """Detecta el modo de transporte del mensaje. Default: transit."""
+    for modo, keywords in _MODO_KEYWORDS.items():
+        if contiene_alguna(texto_norm, keywords):
+            return modo
+    return "transit"
+
+def _maps_link(sede: str, modo: str) -> str:
+    dest = _MAPS_DEST.get(sede, _MAPS_DEST["alem"])
+    return f"{_MAPS_BASE}&destination={dest}&travelmode={modo}"
+
+def _txt_como_llegar(sede: str, modo: str) -> str:
+    nombre_sede = DATA_COMO_LLEGAR.get(sede, {}).get("nombre", "UNPAZ")
+    emoji = _MODO_EMOJI[modo]
+    nombre_modo = _MODO_NOMBRE[modo]
+    link = _maps_link(sede, modo)
     return (
-        f"🗺️ *Cómo llegar a {data['nombre']}*\n\n"
-        + data.get(origen, data["a_pie"])
+        f"🗺️ *Cómo llegar a {nombre_sede} — {nombre_modo}*\n\n"
+        f"Tocá el link y Google Maps te guía desde donde estás 👇\n\n"
+        f"{emoji} {link}"
     ) + _pie("Escribí MENÚ para más opciones")
 
 def _txt_como_llegar_todo() -> str:
-    resp = "🗺️ *Cómo llegar a UNPAZ — Campus Alem:*\n\n"
-    d = DATA_COMO_LLEGAR["alem"]
-    resp += d["desde_acceso_oeste"] + "\n\n"
-    resp += d["desde_panamericana"] + "\n\n"
-    resp += d["a_pie"] + "\n\n"
+    resp = "🗺️ *Cómo llegar a UNPAZ*\n\nElegí tu medio de transporte 👇\n\n"
+    resp += "📍 *Campus Alem (sede principal):*\n"
+    for modo in ["transit", "driving", "walking"]:
+        resp += f"{_MODO_EMOJI[modo]} {_MODO_NOMBRE[modo].capitalize()}:\n{_maps_link('alem', modo)}\n\n"
     resp += "──────────\n"
-    resp += "🗺️ *Campus Arregui:*\n\n"
-    d2 = DATA_COMO_LLEGAR["arregui"]
-    resp += d2["desde_acceso_oeste"] + "\n\n"
-    resp += d2["desde_panamericana"] + "\n\n"
-    resp += d2["a_pie"]
+    resp += "📍 *Campus Arregui:*\n"
+    for modo in ["transit", "driving", "walking"]:
+        resp += f"{_MODO_EMOJI[modo]} {_MODO_NOMBRE[modo].capitalize()}:\n{_maps_link('arregui', modo)}\n\n"
+    resp += "_Tocá cualquier link y Maps te guía desde donde estás._"
     return resp + _pie()
 
 # ─── FAQ ──────────────────────────────────────────────────────────────────────
@@ -433,62 +469,40 @@ def _handle_faq(uid: str, texto_norm: str) -> str:
 
 # ─── Cómo llegar: estado inteligente ─────────────────────────────────────────
 
-_TRANSPORTE_PUBLICO = (
-    "🚌 *Transporte público a UNPAZ:*\n\n"
-    "🚆 *Tren:*\n"
-    "Ramal José C. Paz (Ferrocarril Mitre) → bajá en *Estación José C. Paz*\n"
-    "Desde la estación: caminás por Ruta 24 hacia Av. Alem (~10 min a pie)\n\n"
-    "🚌 *Colectivos:*\n"
-    "• Línea 440 — pasa por Av. Alem\n"
-    "• Consultá en moovit.com o Google Maps con destino 'UNPAZ José C. Paz'\n\n"
-    "🔗 Planificá tu viaje: https://maps.google.com/?q=UNPAZ+Jose+C+Paz"
-)
-
 def _handle_viaje(uid: str, texto_norm: str) -> str:
     estado    = est.get(uid)
     esperando = estado.get("esperando")
 
-    # Follow-up sobre transporte público (puede venir con o sin estado activo)
-    if contiene_alguna(texto_norm, ["transporte", "colectivo", "micro", "tren", "que tomo",
-                                     "que linea", "que colectivo", "que tren", "publico"]):
+    sede = "arregui" if "arregui" in texto_norm else "alem"
+
+    if esperando in ("origen_viaje", "viaje_followup"):
+        # Detectar modo de transporte en la respuesta del usuario
+        modo = _detectar_modo(texto_norm)
+
+        # Si el usuario mencionó un modo claro → dar link directo
+        modo_explicito = any(
+            contiene_alguna(texto_norm, kws) for kws in _MODO_KEYWORDS.values()
+        )
+        if modo_explicito:
+            est.avanzar(uid, esperando="viaje_followup")
+            return _txt_como_llegar(sede, modo)
+
+        # Si no entendimos el modo → mostrar todas las opciones con links
         est.salir(uid)
-        return _TRANSPORTE_PUBLICO + _pie("Escribí MENÚ para más opciones")
-
-    if esperando == "origen_viaje":
-        # Detectar sede destino
-        sede = "arregui" if "arregui" in texto_norm else "alem"
-
-        # Detectar origen
-        if contiene_alguna(texto_norm, ["acceso", "oeste", "moron", "merlo", "moreno", "ituzaingo", "haedo"]):
-            origen = "desde_acceso_oeste"
-        elif contiene_alguna(texto_norm, ["panamericana", "norte", "tigre", "pilar", "zona norte", "palermo", "capital", "caba"]):
-            origen = "desde_panamericana"
-        elif contiene_alguna(texto_norm, ["pie", "tren", "estacion", "caminando", "colectivo", "publico"]):
-            origen = "a_pie"
-        else:
-            # No detectamos origen → mostrar las tres opciones
-            est.salir(uid)
-            return _txt_como_llegar_todo()
-
-        # Quedarse en estado viaje para que el usuario pueda hacer follow-up
-        est.avanzar(uid, esperando="viaje_followup")
-        return _txt_como_llegar(sede, origen)
+        return _txt_como_llegar_todo()
 
     if esperando == "viaje_followup":
-        # Otra pregunta relacionada al viaje
-        if contiene_alguna(texto_norm, ["arregui"]):
-            est.avanzar(uid, esperando="viaje_followup")
-            return _txt_como_llegar_todo()
-        # Si no es de viaje, salimos del estado
         est.salir(uid)
-        return None  # Dejar que el flujo principal lo maneje
+        return None  # No era de viaje, flujo principal lo resuelve
 
-    # Primera vez: preguntar desde dónde
+    # Primera vez: preguntar en qué medio va
     est.entrar(uid, "viaje", esperando="origen_viaje")
     return (
-        "🗺️ *¿Cómo llego a UNPAZ?*\n\n"
-        "Para darte las indicaciones más precisas, ¿desde dónde venís?\n\n"
-        "_Ejemplo: 'Acceso Oeste', 'Panamericana', 'José C. Paz a pie'_"
+        "🗺️ *¿Cómo llegás a UNPAZ?*\n\n"
+        "¿En qué medio vas?\n\n"
+        "🚌 Colectivo / tren\n"
+        "🚗 Auto / moto\n"
+        "🚶 A pie"
     ) + _FOOTER
 
 # ─── Respuesta directa por intención ─────────────────────────────────────────
