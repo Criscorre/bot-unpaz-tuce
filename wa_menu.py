@@ -495,7 +495,10 @@ def _handle_viaje(uid: str, texto_norm: str) -> str:
 
 _KW_HORARIO     = ["horario", "cuando cursa", "que dia", "aula de", "comision de"]
 _KW_CORRELATIVA = ["correlativa", "requiere", "necesito tener", "previa", "para cursar"]
-_KW_SEDE        = ["sede", "donde queda", "donde esta", "direccion", "edificio"]
+_KW_SEDE        = ["sede", "donde queda", "donde esta", "donde es", "direccion",
+                   "edificio", "ubicacion", "ubicado", "domicilio", "como llegar",
+                   "unpaz queda", "unpaz esta", "la universidad", "la facu",
+                   "cem", "biblioteca", "comedor", "alem", "arregui", "pueyrredon"]
 _KW_LLEGAR      = ["como llego", "como llegar", "como ir a", "como voy", "indicaciones",
                    "transporte", "colectivo", "micro", "tren", "colectivos", "como me muevo",
                    "que tomo", "que linea", "que colectivo", "que tren"]
@@ -532,9 +535,14 @@ def _respuesta_directa(uid: str, texto_norm: str, texto_original: str) -> str | 
         return _handle_viaje(uid, texto_norm)
 
     if contiene_alguna(texto_norm, _KW_SEDE):
-        if "arregui" in texto_norm:
-            s = SEDES["arregui"]
-            return f"📍 *{s['nombre']}*\n{s['direccion']}\n{s['maps']}" + _pie()
+        # Sede específica mencionada → Maps inmediato
+        for key, s in SEDES.items():
+            if key in texto_norm or normalizar(s["nombre"]) in texto_norm:
+                resp = f"📍 *{s['nombre']}*\n{s['direccion']}\n🗺️ {s['maps']}"
+                if s.get("extra"):
+                    resp += f"\n_{s['extra']}_"
+                return resp + _pie()
+        # Genérico → lista completa con Maps
         return _txt_sedes()
 
     if contiene_alguna(texto_norm, _KW_CALENDARIO):
