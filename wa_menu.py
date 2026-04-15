@@ -149,7 +149,7 @@ def _buscar_materia_activa(texto_norm: str) -> str | None:
             if all(p in m_norm for p in palabras):
                 return m
     for p in sorted(palabras, key=len, reverse=True):
-        if len(p) >= 4:
+        if len(p) >= 5:  # mínimo 5 para evitar preposiciones: "para", "como", "pero"...
             for m in _MATERIAS:
                 if p in normalizar(m):
                     return m
@@ -524,7 +524,20 @@ _KW_CONTACTO    = ["mesa de ayuda", "correo de", "email de", "contacto de", "bec
 _KW_CARRERA_DESC = ["que es la tuce", "de que trata", "perfil del egresado", "para que sirve", "descripcion de la carrera"]
 
 def _respuesta_directa(uid: str, texto_norm: str, texto_original: str) -> str | None:
-    # Materia específica mencionada por nombre
+    # ── Primero: viaje/ubicación (evita que "para", "llegar", etc. matcheen materias) ──
+    if contiene_alguna(texto_norm, _KW_LLEGAR):
+        return _handle_viaje(uid, texto_norm)
+
+    if contiene_alguna(texto_norm, _KW_SEDE):
+        for key, s in SEDES.items():
+            if key in texto_norm or normalizar(s["nombre"]) in texto_norm:
+                resp = f"📍 *{s['nombre']}*\n{s['direccion']}\n🗺️ {s['maps']}"
+                if s.get("extra"):
+                    resp += f"\n_{s['extra']}_"
+                return resp + _pie()
+        return _txt_sedes()
+
+    # ── Luego: materias (solo si no era una consulta de viaje) ──────────────────
     materia = _buscar_materia_activa(texto_norm)
     if materia and not contiene_alguna(texto_norm, ["correlativa", "previa", "requiere"]):
         return _txt_horario_materia(materia)
@@ -544,20 +557,6 @@ def _respuesta_directa(uid: str, texto_norm: str, texto_original: str) -> str | 
         if materia:
             return _txt_horario_materia(materia)
         return _txt_lista_materias()
-
-    if contiene_alguna(texto_norm, _KW_LLEGAR):
-        return _handle_viaje(uid, texto_norm)
-
-    if contiene_alguna(texto_norm, _KW_SEDE):
-        # Sede específica mencionada → Maps inmediato
-        for key, s in SEDES.items():
-            if key in texto_norm or normalizar(s["nombre"]) in texto_norm:
-                resp = f"📍 *{s['nombre']}*\n{s['direccion']}\n🗺️ {s['maps']}"
-                if s.get("extra"):
-                    resp += f"\n_{s['extra']}_"
-                return resp + _pie()
-        # Genérico → lista completa con Maps
-        return _txt_sedes()
 
     if contiene_alguna(texto_norm, _KW_CALENDARIO):
         return _txt_calendario()
