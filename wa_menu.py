@@ -102,15 +102,34 @@ MSG_CERRAR = "👋 ¡Hasta luego{nombre}! Cuando necesités algo, acá estoy. �
 def _esc_uid(uid: str) -> str:
     return uid.replace(".", "___DOT___").replace("@", "___AT___").replace("+", "___PLUS___")
 
-def _get_nombre(firebase_db, uid: str) -> str | None:
+def _get_usuario(firebase_db, uid: str) -> dict:
+    """Lee el nodo completo del usuario (nombre, visto)."""
     try:
-        return firebase_db.reference(f"wa_usuarios/{_esc_uid(uid)}/nombre").get()
+        data = firebase_db.reference(f"wa_usuarios/{_esc_uid(uid)}").get()
+        return data if isinstance(data, dict) else {}
     except:
-        return None
+        return {}
+
+def _get_nombre(firebase_db, uid: str) -> str | None:
+    return _get_usuario(firebase_db, uid).get("nombre")
+
+def _get_visto(firebase_db, uid: str) -> bool:
+    """True si el usuario ya tuvo al menos un intercambio con el bot."""
+    return bool(_get_usuario(firebase_db, uid).get("visto"))
+
+def _marcar_visto(firebase_db, uid: str):
+    """Registra que el usuario ya fue contactado (aunque no haya dado nombre)."""
+    try:
+        firebase_db.reference(f"wa_usuarios/{_esc_uid(uid)}").update({"visto": True})
+    except:
+        pass
 
 def _set_nombre(firebase_db, uid: str, nombre: str):
     try:
-        firebase_db.reference(f"wa_usuarios/{_esc_uid(uid)}").update({"nombre": nombre.strip().capitalize()})
+        firebase_db.reference(f"wa_usuarios/{_esc_uid(uid)}").update({
+            "nombre": nombre.strip().capitalize(),
+            "visto":  True,
+        })
     except:
         pass
 
@@ -414,9 +433,26 @@ def _handle_faq(uid: str, texto_norm: str) -> str:
 
 # ─── Cómo llegar: estado inteligente ─────────────────────────────────────────
 
+_TRANSPORTE_PUBLICO = (
+    "🚌 *Transporte público a UNPAZ:*\n\n"
+    "🚆 *Tren:*\n"
+    "Ramal José C. Paz (Ferrocarril Mitre) → bajá en *Estación José C. Paz*\n"
+    "Desde la estación: caminás por Ruta 24 hacia Av. Alem (~10 min a pie)\n\n"
+    "🚌 *Colectivos:*\n"
+    "• Línea 440 — pasa por Av. Alem\n"
+    "• Consultá en moovit.com o Google Maps con destino 'UNPAZ José C. Paz'\n\n"
+    "🔗 Planificá tu viaje: https://maps.google.com/?q=UNPAZ+Jose+C+Paz"
+)
+
 def _handle_viaje(uid: str, texto_norm: str) -> str:
     estado    = est.get(uid)
     esperando = estado.get("esperando")
+
+    # Follow-up sobre transporte público (puede venir con o sin estado activo)
+    if contiene_alguna(texto_norm, ["transporte", "colectivo", "micro", "tren", "que tomo",
+                                     "que linea", "que colectivo", "que tren", "publico"]):
+        est.salir(uid)
+        return _TRANSPORTE_PUBLICO + _pie("Escribí MENÚ para más opciones")
 
     if esperando == "origen_viaje":
         # Detectar sede destino
@@ -427,15 +463,25 @@ def _handle_viaje(uid: str, texto_norm: str) -> str:
             origen = "desde_acceso_oeste"
         elif contiene_alguna(texto_norm, ["panamericana", "norte", "tigre", "pilar", "zona norte", "palermo", "capital", "caba"]):
             origen = "desde_panamericana"
-        elif contiene_alguna(texto_norm, ["pie", "tren", "estacion", "caminando", "colectivo"]):
+        elif contiene_alguna(texto_norm, ["pie", "tren", "estacion", "caminando", "colectivo", "publico"]):
             origen = "a_pie"
         else:
             # No detectamos origen → mostrar las tres opciones
             est.salir(uid)
             return _txt_como_llegar_todo()
 
-        est.salir(uid)
+        # Quedarse en estado viaje para que el usuario pueda hacer follow-up
+        est.avanzar(uid, esperando="viaje_followup")
         return _txt_como_llegar(sede, origen)
+
+    if esperando == "viaje_followup":
+        # Otra pregunta relacionada al viaje
+        if contiene_alguna(texto_norm, ["arregui"]):
+            est.avanzar(uid, esperando="viaje_followup")
+            return _txt_como_llegar_todo()
+        # Si no es de viaje, salimos del estado
+        est.salir(uid)
+        return None  # Dejar que el flujo principal lo maneje
 
     # Primera vez: preguntar desde dónde
     est.entrar(uid, "viaje", esperando="origen_viaje")
@@ -449,8 +495,13 @@ def _handle_viaje(uid: str, texto_norm: str) -> str:
 
 _KW_HORARIO     = ["horario", "cuando cursa", "que dia", "aula de", "comision de"]
 _KW_CORRELATIVA = ["correlativa", "requiere", "necesito tener", "previa", "para cursar"]
-_KW_SEDE        = ["sede", "donde queda", "donde esta", "direccion", "edificio"]
-_KW_LLEGAR      = ["como llego", "como llegar", "como ir a", "como voy", "indicaciones"]
+_KW_SEDE        = ["sede", "donde queda", "donde esta", "donde es", "direccion",
+                   "edificio", "ubicacion", "ubicado", "domicilio", "como llegar",
+                   "unpaz queda", "unpaz esta", "la universidad", "la facu",
+                   "cem", "biblioteca", "comedor", "alem", "arregui", "pueyrredon"]
+_KW_LLEGAR      = ["como llego", "como llegar", "como ir a", "como voy", "indicaciones",
+                   "transporte", "colectivo", "micro", "tren", "colectivos", "como me muevo",
+                   "que tomo", "que linea", "que colectivo", "que tren"]
 _KW_CALENDARIO  = ["calendario", "cuando empiezan", "inicio de clases", "inscripcion al trimestre"]
 _KW_PLAN        = ["plan de estudio", "materias de la carrera", "que materias hay", "cuantos anos dura"]
 _KW_COMUNIDAD   = ["grupo de whatsapp", "instagram", "facebook", "comunidad tuce", "redes sociales"]
@@ -484,9 +535,14 @@ def _respuesta_directa(uid: str, texto_norm: str, texto_original: str) -> str | 
         return _handle_viaje(uid, texto_norm)
 
     if contiene_alguna(texto_norm, _KW_SEDE):
-        if "arregui" in texto_norm:
-            s = SEDES["arregui"]
-            return f"📍 *{s['nombre']}*\n{s['direccion']}\n{s['maps']}" + _pie()
+        # Sede específica mencionada → Maps inmediato
+        for key, s in SEDES.items():
+            if key in texto_norm or normalizar(s["nombre"]) in texto_norm:
+                resp = f"📍 *{s['nombre']}*\n{s['direccion']}\n🗺️ {s['maps']}"
+                if s.get("extra"):
+                    resp += f"\n_{s['extra']}_"
+                return resp + _pie()
+        # Genérico → lista completa con Maps
         return _txt_sedes()
 
     if contiene_alguna(texto_norm, _KW_CALENDARIO):
@@ -569,7 +625,7 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
     # ── Flujo de registro de nombre ───────────────────────────────────────────
     if seccion == "esperando_nombre":
         nombre_ingresado = texto.strip().split()[0].capitalize()
-        _set_nombre(firebase_db, from_id, nombre_ingresado)
+        _set_nombre(firebase_db, from_id, nombre_ingresado)  # también setea visto=True
         est.salir(from_id)
         _log(firebase_db, "nombre_registrado")
         return (
@@ -588,7 +644,10 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
         return _handle_faq(from_id, texto_norm)
 
     if seccion == "viaje":
-        return _handle_viaje(from_id, texto_norm)
+        resp = _handle_viaje(from_id, texto_norm)
+        if resp is not None:
+            return resp
+        # resp=None significa que no era una consulta de viaje; continuamos el flujo normal
 
     # ── Sin estado: opciones numeradas del menú (5 opciones) ─────────────────
     num = extraer_numero(texto_norm)
@@ -647,8 +706,9 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
         _log(firebase_db, "directa")
         return directa
 
-    # ── Primer contacto: pedir nombre ─────────────────────────────────────────
-    if not nombre_db:
+    # ── Primer contacto: pedir nombre (solo en el primer mensaje, nunca después) ─
+    if not nombre_db and not _get_visto(firebase_db, from_id):
+        _marcar_visto(firebase_db, from_id)
         est.entrar(from_id, "esperando_nombre")
         _log(firebase_db, "bienvenida")
         return PREGUNTA_NOMBRE

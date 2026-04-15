@@ -53,13 +53,16 @@ FAQ = [
     {
         "q": "¿Cuáles son las sedes?",
         "a": (
-            "📍 *Sedes UNPAZ — Campus Alem:*\n"
+            "📍 *Campus Alem:*\n"
             "• CEM (Pueyrredón): Av. Alem 4593\n"
+            "  🗺️ https://maps.google.com/?q=Leandro+N.+Alem+4593,+Jose+C.+Paz\n"
             "• Sede Alem: Av. Alem 4731\n"
-            "• Biblioteca 'José C. Mondoví': Av. Alem 4673\n"
-            "• Comedor Universitario: Av. Alem 4751\n\n"
+            "  🗺️ https://maps.google.com/?q=Leandro+N.+Alem+4731,+Jose+C.+Paz\n"
+            "• Biblioteca: Av. Alem 4673\n"
+            "  🗺️ https://maps.google.com/?q=Leandro+N.+Alem+4673,+Jose+C.+Paz\n\n"
             "📍 *Campus Arregui:*\n"
-            "• Sede Arregui: Av. Arregui 501"
+            "• Sede Arregui: Av. Arregui 501\n"
+            "  🗺️ https://maps.google.com/?q=Av.+Hector+Arregui+501,+Jose+C.+Paz"
         ),
     },
     {
