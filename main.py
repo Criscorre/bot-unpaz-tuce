@@ -14,7 +14,10 @@ import http.server, socketserver
 from info_unpaz import DATOS_TECNICATURA
 from materias_db import LISTA_HORARIOS
 from scraper import scrape_todo, obtener_contexto_ia, obtener_novedades_texto, leer_cache
-from datos_carrera import DATA_CALENDARIO, DATA_PLAN, CORRELATIVAS, correlativas_de
+from datos_carrera import (
+    DATA_CALENDARIO, DATA_PLAN, CORRELATIVAS, correlativas_de,
+    DATA_CARRERA_INFO, DATA_DIRECTOR,
+)
 import wa_menu
 
 # ─── Config ───────────────────────────────────────────────────────────────────
@@ -57,6 +60,47 @@ scheduler = BackgroundScheduler(daemon=True)
 scheduler.add_job(_scrape, "interval", hours=6, id="scraper")
 scheduler.start()
 threading.Thread(target=_scrape, daemon=True).start()
+
+# ─── Historial de conversación ────────────────────────────────────────────────
+MAX_HISTORIAL = 10  # Máximo de intercambios guardados por usuario
+
+def _esc_uid(uid: str) -> str:
+    return uid.replace(".", "___DOT___").replace("@", "___AT___").replace("+", "___PLUS___")
+
+def _leer_historial(uid: str) -> list:
+    """Lee el historial de conversación de un usuario desde Firebase."""
+    if not uid:
+        return []
+    try:
+        data = firebase_db.reference(f"wa_historial/{_esc_uid(uid)}").get()
+        if not data:
+            return []
+        if isinstance(data, list):
+            return [x for x in data if x]
+        if isinstance(data, dict):
+            keys = sorted(data.keys(), key=lambda x: int(x) if x.isdigit() else 0)
+            return [data[k] for k in keys if data[k]]
+        return []
+    except:
+        return []
+
+def _guardar_historial(uid: str, pregunta: str, respuesta: str):
+    """Guarda un intercambio en el historial del usuario en Firebase."""
+    if not uid:
+        return
+    try:
+        historial = _leer_historial(uid)
+        historial.append({
+            "q":  pregunta[:300],
+            "r":  respuesta[:600],
+            "ts": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        })
+        if len(historial) > MAX_HISTORIAL:
+            historial = historial[-MAX_HISTORIAL:]
+        data = {str(i): h for i, h in enumerate(historial)}
+        firebase_db.reference(f"wa_historial/{_esc_uid(uid)}").set(data)
+    except:
+        pass
 
 # ─── IA ───────────────────────────────────────────────────────────────────────
 URLS_UNPAZ = {
@@ -103,12 +147,27 @@ def _cache_fresco() -> bool:
     except:
         return False
 
-def responder_ia(pregunta: str) -> str:
-    # Si el cache es viejo, refrescarlo en background
+def responder_ia(pregunta: str, uid: str = "") -> str:
+    """
+    Responde usando GPT-3.5 con contexto de la carrera e historial del usuario.
+    Se usa internamente como fallback cuando el bot no tiene una respuesta directa.
+    """
+    # Refrescar cache si está viejo
     if not _cache_fresco():
         threading.Thread(target=_scrape, daemon=True).start()
 
-    ctx = f"{DATOS_TECNICATURA}\nCALENDARIO: {DATA_CALENDARIO}\nPLAN: {DATA_PLAN}\n"
+    # Construir contexto base
+    info_carrera = (
+        f"TÍTULO: {DATA_CARRERA_INFO['titulo']}\n"
+        f"DURACIÓN: {DATA_CARRERA_INFO['duracion']}\n"
+        f"MODALIDAD: {DATA_CARRERA_INFO['modalidad']}\n"
+        f"DESCRIPCIÓN: {DATA_CARRERA_INFO['descripcion']}\n"
+        f"PERFIL EGRESADO: {', '.join(DATA_CARRERA_INFO['perfil_egresado'])}\n"
+        f"DIRECTOR: {DATA_DIRECTOR['nombre']}\n"
+        f"PLAN: {list(DATA_PLAN.keys())}\n"
+        f"CALENDARIO: {DATA_CALENDARIO}\n"
+    )
+    ctx = f"{DATOS_TECNICATURA}\n{info_carrera}"
 
     try:
         scraper_ctx = obtener_contexto_ia(firebase_db, pregunta)
@@ -124,34 +183,51 @@ def responder_ia(pregunta: str) -> str:
             ctx += f"\nINFO WEB {url}:\n{info}"
 
     sistema = (
-        "Sos Alma TUCE, la asistente virtual de la Tecnicatura Universitaria en Comercio Electrónico (TUCE) de UNPAZ. "
-        "Usás registro informal con 'vos' (no 'tú'). Sos directo, claro y amigable. Máximo 3 líneas por respuesta. "
-        "REGLA PRINCIPAL: NUNCA inventes información. Si no sabés algo con certeza, respondé: "
-        "'No tengo esa información. Te recomiendo consultar en unpaz.edu.ar o escribir a la mesa de ayuda.' "
-        "Respondés SOLO sobre UNPAZ, la TUCE, trámites, becas y vida universitaria. "
-        "NUNCA respondas sobre horarios, aulas o comisiones específicas — para eso existe la sección Horarios. "
-        "Si te preguntan algo ajeno a UNPAZ/TUCE, decí que solo podés ayudar con temas de la carrera. "
-        "Si te preguntan quién te creó, decí: 'Fui desarrollado por Bytes Creativos, agencia de marketing y soluciones digitales nacida en la UNPAZ. "
-        "Podés conocerlos en https://bytescreativos.com.ar/ o en Instagram @bytescreativoss' "
-        "El CIU es el Ciclo de Inicio Universitario. El área que lo gestiona es la Dirección de Acceso y Apoyo al Estudiante. "
-        "No digas 'la carrera de TUCE' — decí 'la TUCE' o 'la carrera'. "
-        "No digas 'primer cuatrimestre' — esta carrera se organiza por trimestres. "
-        "Contexto disponible: " + ctx
+        "Sos Alma TUCE, la asistente virtual de la Tecnicatura Universitaria en Comercio Electrónico (TUCE) de la UNPAZ. "
+        "Usás registro informal con 'vos' (no 'tú'). Sos directo, claro y amigable. Máximo 4 líneas por respuesta. "
+        "\n\nTEMAS EN LOS QUE ERES EXPERTA: e-commerce, comercio electrónico, marketing digital, estrategias de venta online, "
+        "tiendas online, CEO, emprendimiento digital, salida laboral en el mundo digital, SEO, redes sociales con fines comerciales, "
+        "métricas digitales, campañas publicitarias online, gestión de proyectos digitales, y todo lo relacionado a la TUCE y UNPAZ. "
+        "\n\nREGLAS IMPORTANTES:\n"
+        "1. NUNCA inventes información sobre la carrera, fechas, o trámites. Si no sabés algo con certeza, respondé: "
+        "'No tengo esa información. Te recomiendo consultar en unpaz.edu.ar o escribir a la mesa de ayuda.'\n"
+        "2. NUNCA respondas sobre horarios, aulas ni comisiones específicas — para eso existe la sección Horarios del menú.\n"
+        "3. Si te preguntan algo ajeno a e-commerce, marketing digital, TUCE o UNPAZ, podés responder brevemente si es un tema general de negocios digitales.\n"
+        "4. Si te preguntan quién te creó: 'Fui desarrollada por Bytes Creativos, agencia de marketing y soluciones digitales nacida en la UNPAZ. "
+        "Conocelos en https://bytescreativos.com.ar/ o en Instagram @bytescreativoss'\n"
+        "5. El CIU es el Ciclo de Inicio Universitario. El área que lo gestiona es la Dirección de Acceso y Apoyo al Estudiante.\n"
+        "6. No digas 'la carrera de TUCE' — decí 'la TUCE' o 'la carrera'.\n"
+        "7. No digas 'cuatrimestre' — esta carrera se organiza por trimestres.\n"
+        "\nContexto disponible: " + ctx
     )
+
+    # Leer historial del usuario para contexto conversacional
+    historial = _leer_historial(uid) if uid else []
+
+    messages = [{"role": "system", "content": sistema}]
+    # Incluir últimos 3 intercambios para continuidad
+    for h in historial[-3:]:
+        if h.get("q") and h.get("r"):
+            messages.append({"role": "user",      "content": h["q"]})
+            messages.append({"role": "assistant", "content": h["r"]})
+    messages.append({"role": "user", "content": pregunta})
+
     try:
         r = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system",  "content": sistema},
-                {"role": "user",    "content": pregunta},
-            ],
-            max_tokens=350,
-            temperature=0.1,
+            messages=messages,
+            max_tokens=400,
+            temperature=0.15,
         )
-        return r.choices[0].message.content
+        respuesta = r.choices[0].message.content
     except Exception as e:
         print(f"❌ Error IA: {e}")
-        return "Servicio no disponible. Consultá en unpaz.edu.ar"
+        respuesta = "Servicio no disponible. Consultá en unpaz.edu.ar"
+
+    # Guardar en historial
+    _guardar_historial(uid, pregunta, respuesta)
+
+    return respuesta
 
 # ─── Flask — webhook WhatsApp ─────────────────────────────────────────────────
 flask_app = Flask(__name__)
