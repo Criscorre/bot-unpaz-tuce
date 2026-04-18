@@ -62,8 +62,7 @@ MENU_TEXTO = (
     "3️⃣  👥 Comunidad TUCE\n"
     "4️⃣  ❓ Preguntas frecuentes\n"
     "5️⃣  📍 Sedes UNPAZ\n"
-    "6️⃣  🤖 Consultar a la IA\n"
-    "7️⃣  🙋 Hablar con un humano\n\n"
+    "6️⃣  🙋 Hablar con un humano\n\n"
     "_Escribí el número, el nombre de la opción, o preguntame directamente._"
     + _FOOTER
 )
@@ -428,8 +427,7 @@ _KEYWORDS_OPCION = {
     3: ["comunidad tuce", "grupo de whatsapp", "redes sociales"],
     4: ["preguntas frecuentes", "faq", "dudas frecuentes"],
     5: ["sedes unpaz", "ver sedes", "donde queda unpaz"],
-    6: ["consultar ia", "hablar con ia", "modo ia"],
-    7: ["hablar con humano", "hablar con un humano", "hablar con una persona", "hablar con alguien",
+    6: ["hablar con humano", "hablar con un humano", "hablar con una persona", "hablar con alguien",
         "agente humano", "soporte humano", "atencion personalizada", "persona real"],
 }
 
@@ -529,15 +527,6 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
         return _txt_sedes()
 
     if num == 6:
-        est.entrar(from_id, "ia")
-        _log(firebase_db, "ia_activado")
-        return (
-            "🤖 *Modo IA activado*\n\n"
-            "Preguntame sobre la TUCE, trámites, becas o UNPAZ.\n"
-            "_No respondo sobre horarios ni aulas — para eso usá la opción 2._"
-        ) + _pie()
-
-    if num == 7:
         _log(firebase_db, "humano")
         return _MSG_HUMANO + _pie()
 
