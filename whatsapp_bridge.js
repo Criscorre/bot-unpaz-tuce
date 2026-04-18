@@ -86,6 +86,27 @@ let qrDataUrl = null;
 
 // ─── Servidor HTTP ────────────────────────────────────────────────────────────
 http.createServer(async (req, res) => {
+    if (req.method === "POST" && req.url === "/broadcast") {
+        let body = "";
+        req.on("data", chunk => body += chunk);
+        req.on("end", async () => {
+            try {
+                const { mensaje } = JSON.parse(body);
+                if (!mensaje) {
+                    res.writeHead(400, { "Content-Type": "application/json" });
+                    return res.end(JSON.stringify({ error: "Falta el campo 'mensaje'" }));
+                }
+                const resultado = await enviarBroadcast(mensaje);
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(JSON.stringify(resultado));
+            } catch (e) {
+                res.writeHead(500, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
     if (req.url === "/qr") {
         if (!qrDataUrl) {
             res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
@@ -111,6 +132,44 @@ http.createServer(async (req, res) => {
 }).listen(PORT, () =>
     console.log(`🌍 Servidor activo en puerto ${PORT} — QR en /qr`)
 );
+
+// ─── Broadcast ────────────────────────────────────────────────────────────────
+let sockGlobal = null;  // referencia al socket activo
+
+async function enviarBroadcast(mensaje) {
+    if (!fbDb) throw new Error("Firebase no disponible");
+    if (!sockGlobal) throw new Error("WhatsApp no conectado");
+
+    const snap = await fbDb.ref("wa_usuarios").once("value");
+    if (!snap.exists()) return { enviados: 0, errores: 0 };
+
+    const usuarios = snap.val();
+    let enviados = 0, errores = 0;
+
+    for (const [uidEsc, datos] of Object.entries(usuarios)) {
+        const nombre = datos?.nombre || "estudiante";
+        const jid    = uidEsc
+            .replace(/___DOT___/g, ".")
+            .replace(/___AT___/g, "@")
+            .replace(/___PLUS___/g, "+");
+
+        const texto = mensaje.replace("{nombre}", nombre);
+
+        try {
+            await sockGlobal.sendMessage(jid, { text: texto });
+            console.log(`📤 Broadcast → ${jid}`);
+            enviados++;
+        } catch (e) {
+            console.error(`❌ Error enviando a ${jid}:`, e.message);
+            errores++;
+        }
+
+        // Pausa entre mensajes para no activar anti-spam de WhatsApp
+        await new Promise(r => setTimeout(r, 4000 + Math.random() * 2000));
+    }
+
+    return { enviados, errores };
+}
 
 // ─── Bot WhatsApp ─────────────────────────────────────────────────────────────
 async function startBot() {
@@ -143,7 +202,8 @@ async function startBot() {
             }
         }
         if (connection === "open") {
-            qrDataUrl = null;
+            qrDataUrl  = null;
+            sockGlobal = sock;
             console.log("✅ WhatsApp conectado — Bot TUCE activo");
             await uploadSession(); // Guardar sesión completa al conectar
         }
