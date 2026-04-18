@@ -251,28 +251,226 @@ threading.Thread(
     daemon=True,
 ).start()
 
-# ─── Telegram — solo mensaje de mantenimiento ─────────────────────────────────
-MSG_MANTENIMIENTO = (
-    "🔧 *Bot en actualización*\n\n"
-    "Estamos trabajando en mejoras para vos. ¡Muy pronto volvemos!\n\n"
-    "📱 Mientras tanto, escribinos por *WhatsApp* para consultas.\n\n"
-    "_Att: Bytes Creativos_"
+# ─── Telegram — Bot funcional ─────────────────────────────────────────────────
+
+# Estado de menú por usuario: {chat_id: "principal" | "carrera" | "horarios" | "faq" | "sedes"}
+_tg_estado = {}
+
+_TG_FOOTER = "\n\n_I - Inicio  |  V - Volver  |  S - Salir_"
+
+_TG_MENU = (
+    "📋 *Menú principal:*\n\n"
+    "1️⃣  📚 Información de la carrera\n"
+    "2️⃣  🕒 Horarios del trimestre\n"
+    "3️⃣  👥 Comunidad TUCE\n"
+    "4️⃣  ❓ Preguntas frecuentes\n"
+    "5️⃣  📍 Sedes UNPAZ\n"
+    "6️⃣  🙋 Hablar con un humano\n\n"
+    "_Escribí el número o preguntame directamente._"
+    + _TG_FOOTER
 )
 
-@bot.message_handler(func=lambda m: True, content_types=["text", "photo", "document", "sticker", "voice"])
-def mantenimiento(message):
+_TG_SUBMENU_CARRERA = (
+    "📚 *Información de la carrera:*\n\n"
+    "1️⃣  Sobre la TUCE\n"
+    "2️⃣  Plan de estudios\n"
+    "3️⃣  Calendario académico\n"
+    "4️⃣  Correlativas\n"
+    "5️⃣  Director de la carrera\n"
+    + _TG_FOOTER
+)
+
+_TG_MSG_HUMANO = (
+    "Te conectamos con la comunidad TUCE directamente por WhatsApp. "
+    "¡Allí vas a encontrar personas que te pueden ayudar! 👥\n"
+    "https://chat.whatsapp.com/FSwCNJd2GirBVIVCZDGU0B"
+    + _TG_FOOTER
+)
+
+def _tg_send(cid, texto):
     try:
-        bot.send_message(message.chat.id, MSG_MANTENIMIENTO, parse_mode="Markdown")
+        bot.send_message(cid, texto, parse_mode="Markdown", disable_web_page_preview=True)
     except Exception as e:
-        print(f"⚠️ Error enviando mantenimiento: {e}")
+        print(f"⚠️ Error Telegram send: {e}")
+
+def _tg_menu_carrera(num):
+    if num == 1:
+        info = DATA_CARRERA_INFO
+        return (
+            f"🎓 *{info['titulo']}*\n\n"
+            f"📅 Duración: {info['duracion']}\n"
+            f"🏫 Modalidad: {info['modalidad']}\n\n"
+            f"{info['descripcion']}"
+        ) + _TG_FOOTER
+    if num == 2:
+        lines = []
+        for anio, mats in DATA_PLAN.items():
+            lines.append(f"*{anio}:*")
+            lines += [f"  • {m}" for m in mats]
+        return "📋 *Plan de estudios TUCE:*\n\n" + "\n".join(lines) + _TG_FOOTER
+    if num == 3:
+        lines = [f"*{k}:*\n{v}" for k, v in DATA_CALENDARIO.items()]
+        return "\n\n".join(lines) + _TG_FOOTER
+    if num == 4:
+        return (
+            "🔗 *Correlativas*\n\nEscribí el nombre de la materia "
+            "y te digo qué necesitás tener aprobado."
+        ) + _TG_FOOTER
+    if num == 5:
+        d = DATA_DIRECTOR
+        return (
+            f"👤 *Director de la TUCE:*\n\n"
+            f"*{d['nombre']}*\n"
+            f"📧 {d.get('email', 'Sin datos')}"
+        ) + _TG_FOOTER
+    return None
+
+def _tg_sedes():
+    from wa_menu import SEDES
+    lineas = []
+    for s in SEDES.values():
+        lineas.append(f"📍 *{s['nombre']}*\n{s['direccion']}\n{s['maps']}")
+        if s.get("extra"):
+            lineas[-1] += f"\n_{s['extra']}_"
+    return "\n\n".join(lineas) + _TG_FOOTER
+
+def _tg_faq_lista():
+    from faq_data import FAQ
+    items = "\n".join(f"{i+1}. {f['q']}" for i, f in enumerate(FAQ))
+    return f"❓ *Preguntas frecuentes:*\n\n{items}\n\nEscribí el número para ver la respuesta." + _TG_FOOTER
+
+def _tg_faq_respuesta(num):
+    from faq_data import FAQ
+    if 1 <= num <= len(FAQ):
+        return FAQ[num - 1]["a"] + _TG_FOOTER
+    return None
+
+def _tg_comunidad():
+    return (
+        "👥 *Comunidad TUCE*\n\n"
+        "📱 *Grupo de WhatsApp:* https://chat.whatsapp.com/FSwCNJd2GirBVIVCZDGU0B\n"
+        "📸 *Instagram:* @tuce.unpaz\n"
+        "📘 *Facebook:* TUCE UNPAZ"
+    ) + _TG_FOOTER
+
+@bot.message_handler(commands=["start"])
+def tg_start(message):
+    cid = message.chat.id
+    _tg_estado[cid] = "principal"
+    nombre = message.from_user.first_name or "estudiante"
+    _tg_send(cid, f"¡Hola {nombre}! Soy *Alma TUCE* 🎓\n\n" + _TG_MENU)
+
+@bot.message_handler(func=lambda m: True, content_types=["text"])
+def tg_handle(message):
+    cid   = message.chat.id
+    texto = message.text.strip().lower() if message.text else ""
+    menu  = _tg_estado.get(cid, "principal")
+
+    # Comandos globales
+    if texto in ("i", "inicio", "/menu"):
+        _tg_estado[cid] = "principal"
+        _tg_send(cid, _TG_MENU)
+        return
+    if texto in ("s", "salir"):
+        _tg_estado.pop(cid, None)
+        _tg_send(cid, "👋 ¡Hasta luego! Cuando necesites algo, acá estoy. 😊")
+        return
+    if texto in ("v", "volver"):
+        _tg_estado[cid] = "principal"
+        _tg_send(cid, _TG_MENU)
+        return
+
+    num = None
+    try:
+        num = int(texto)
+    except ValueError:
+        pass
+
+    # ── Menú principal ────────────────────────────────────────────────────────
+    if menu == "principal":
+        if num == 1:
+            _tg_estado[cid] = "carrera"
+            _tg_send(cid, _TG_SUBMENU_CARRERA)
+        elif num == 2:
+            _tg_estado[cid] = "principal"
+            from materias_db import LISTA_HORARIOS
+            materias = sorted(set(f[0] for f in LISTA_HORARIOS))
+            lista = "\n".join(f"• {m}" for m in materias)
+            _tg_send(cid, f"🕒 *Materias del trimestre:*\n\n{lista}\n\nEscribí el nombre de la materia para ver el horario." + _TG_FOOTER)
+            _tg_estado[cid] = "horarios"
+        elif num == 3:
+            _tg_send(cid, _tg_comunidad())
+        elif num == 4:
+            _tg_estado[cid] = "faq"
+            _tg_send(cid, _tg_faq_lista())
+        elif num == 5:
+            _tg_send(cid, _tg_sedes())
+        elif num == 6:
+            _tg_send(cid, _TG_MSG_HUMANO)
+        else:
+            # Texto libre → IA como fallback
+            respuesta = responder_ia(message.text.strip(), uid=f"tg_{cid}")
+            _tg_send(cid, respuesta + _TG_FOOTER)
+
+    # ── Submenú carrera ───────────────────────────────────────────────────────
+    elif menu == "carrera":
+        if num and 1 <= num <= 5:
+            resp = _tg_menu_carrera(num)
+            if num == 4:
+                _tg_estado[cid] = "correlativa"
+            _tg_send(cid, resp)
+        else:
+            _tg_send(cid, _TG_SUBMENU_CARRERA)
+
+    # ── Correlativas ──────────────────────────────────────────────────────────
+    elif menu == "correlativa":
+        from wa_menu import CORRELATIVAS
+        from normalizer import normalizar
+        texto_norm = normalizar(message.text.strip())
+        encontrada = None
+        for info in CORRELATIVAS.values():
+            if normalizar(info["nombre"]) in texto_norm or texto_norm in normalizar(info["nombre"]):
+                encontrada = info
+                break
+        if encontrada:
+            if not encontrada["necesita"]:
+                _tg_send(cid, f"✅ *{encontrada['nombre']}*\n\nNo tiene correlativas." + _TG_FOOTER)
+            else:
+                previas = "\n".join(f"  • {CORRELATIVAS[c]['nombre']}" for c in encontrada["necesita"])
+                _tg_send(cid, f"🔗 *{encontrada['nombre']}*\n\nPara cursarla necesitás:\n{previas}" + _TG_FOOTER)
+        else:
+            _tg_send(cid, "❌ No encontré esa materia. Escribí el nombre completo o parte de él." + _TG_FOOTER)
+
+    # ── Horarios ──────────────────────────────────────────────────────────────
+    elif menu == "horarios":
+        from materias_db import LISTA_HORARIOS
+        from normalizer import normalizar
+        texto_norm = normalizar(message.text.strip())
+        filas = [f for f in LISTA_HORARIOS if normalizar(f[0]) in texto_norm or texto_norm in normalizar(f[0])]
+        if filas:
+            materia = filas[0][0]
+            resp = f"🕒 *{materia}*\n"
+            for f in filas:
+                aula = f[8] if f[8] and f[8] not in ("//", "A confirmar") else "A confirmar"
+                resp += f"\n👥 *Com {f[1]}* — {f[2]} {f[3][:5]}–{f[4][:5]} hs\n🏢 Aula: {aula} | {f[5]}"
+            _tg_send(cid, resp + _TG_FOOTER)
+        else:
+            _tg_send(cid, "❌ No encontré esa materia. Escribí el nombre completo o parte de él." + _TG_FOOTER)
+
+    # ── FAQ ───────────────────────────────────────────────────────────────────
+    elif menu == "faq":
+        if num:
+            resp = _tg_faq_respuesta(num)
+            _tg_send(cid, resp if resp else "❌ Número inválido.\n\n" + _tg_faq_lista())
+        else:
+            _tg_send(cid, _tg_faq_lista())
 
 @bot.callback_query_handler(func=lambda call: True)
-def mantenimiento_callback(call):
+def tg_callback(call):
     try:
         bot.answer_callback_query(call.id)
-        bot.send_message(call.message.chat.id, MSG_MANTENIMIENTO, parse_mode="Markdown")
-    except Exception as e:
-        print(f"⚠️ Error callback mantenimiento: {e}")
+    except Exception:
+        pass
 
 # ─── Arranque ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
