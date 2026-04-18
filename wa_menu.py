@@ -84,7 +84,8 @@ MENU_TEXTO = (
     "2️⃣  🕒 Horarios del trimestre\n"
     "3️⃣  👥 Comunidad TUCE\n"
     "4️⃣  ❓ Preguntas frecuentes\n"
-    "5️⃣  📍 Sedes UNPAZ\n\n"
+    "5️⃣  📍 Sedes UNPAZ\n"
+    "6️⃣  🙋 Hablar con un humano\n\n"
     "_Escribí el número, el nombre de la opción, o preguntame directamente._"
     + _FOOTER
 )
@@ -521,6 +522,11 @@ _KW_PLAN        = ["plan de estudio", "materias de la carrera", "que materias ha
 _KW_COMUNIDAD   = ["grupo de whatsapp", "instagram", "facebook", "comunidad tuce", "redes sociales"]
 _KW_GESTION     = ["campus virtual", "guarani", "siu guarani", "certificado de alumno", "boleto estudiantil", "equivalencias"]
 _KW_CONTACTO    = ["mesa de ayuda", "correo de", "email de", "contacto de", "beca", "pasantia"]
+_KW_HUMANO      = ["hablar con humano", "hablar con una persona", "hablar con alguien", "hablar con un humano",
+                   "quiero hablar con humano", "quiero hablar con una persona", "quiero hablar con alguien",
+                   "quiero un agente", "hablar con agente", "agente humano", "soporte humano",
+                   "atencion personalizada", "persona real", "atencion humana", "necesito ayuda humana",
+                   "hablar con soporte", "contactar soporte", "hablar con un asesor", "asesor humano"]
 _KW_CARRERA_DESC = ["que es la tuce", "de que trata", "perfil del egresado", "para que sirve", "descripcion de la carrera"]
 
 def _respuesta_directa(uid: str, texto_norm: str, texto_original: str) -> str | None:
@@ -576,6 +582,9 @@ def _respuesta_directa(uid: str, texto_norm: str, texto_original: str) -> str | 
     if contiene_alguna(texto_norm, _KW_CONTACTO):
         return _txt_contactos()
 
+    if contiene_alguna(texto_norm, _KW_HUMANO):
+        return _MSG_HUMANO + _pie()
+
     faq = _buscar_faq(texto_norm)
     if faq:
         return faq["a"] + _pie("Escribí MENÚ para más opciones")
@@ -601,7 +610,15 @@ _KEYWORDS_OPCION = {
     3: ["comunidad tuce", "grupo de whatsapp", "redes sociales"],
     4: ["preguntas frecuentes", "faq", "dudas frecuentes"],
     5: ["sedes unpaz", "ver sedes", "donde queda unpaz"],
+    6: ["hablar con humano", "hablar con un humano", "hablar con una persona", "hablar con alguien",
+        "agente humano", "soporte humano", "atencion personalizada", "persona real"],
 }
+
+_MSG_HUMANO = (
+    "Te conectamos con la comunidad TUCE directamente por WhatsApp. "
+    "¡Allí vas a encontrar personas que te pueden ayudar! 👥\n"
+    "https://chat.whatsapp.com/FSwCNJd2GirBVIVCZDGU0B"
+)
 
 def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
     texto_norm = normalizar(texto)
@@ -692,6 +709,10 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
     if num == 5:
         _log(firebase_db, "sedes")
         return _txt_sedes()
+
+    if num == 6:
+        _log(firebase_db, "humano")
+        return _MSG_HUMANO + _pie()
 
     # ── Identidad del bot ─────────────────────────────────────────────────────
     if contiene_alguna(texto_norm, ["quien te creo", "quien te hizo", "quien te desarrollo",
