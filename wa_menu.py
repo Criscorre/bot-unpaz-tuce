@@ -58,7 +58,7 @@ _MATERIAS_PLAN = sorted([info["nombre"] for info in CORRELATIVAS.values()])
 _MATERIAS = sorted(list(set(f[0] for f in LISTA_HORARIOS)))
 
 # ─── Footer estándar ─────────────────────────────────────────────────────────
-_FOOTER = "\n\n*MENÚ* · *ATRÁS* · *CERRAR*"
+_FOOTER = "\n\nV - Volver  |  I - Inicio  |  S - Salir"
 
 def _pie(extra: str = "") -> str:
     if extra:
@@ -80,19 +80,25 @@ PREGUNTA_NOMBRE = (
 
 MENU_TEXTO = (
     "📋 *Menú principal:*\n\n"
-    "1️⃣  📚 Información de la carrera\n"
-    "2️⃣  🕒 Horarios del trimestre\n"
-    "3️⃣  👥 Comunidad TUCE\n"
-    "4️⃣  ❓ Preguntas frecuentes\n"
-    "5️⃣  📍 Sedes UNPAZ\n"
-    "6️⃣  🙋 Hablar con un humano\n\n"
+    "1 - Información de la carrera\n"
+    "2 - Horarios del trimestre\n"
+    "3 - Comunidad TUCE\n"
+    "4 - Preguntas frecuentes\n"
+    "5 - Sedes UNPAZ\n"
+    "6 - Hablar con un humano\n\n"
     "_Escribí el número, el nombre de la opción, o preguntame directamente._"
     + _FOOTER
 )
 
 MSG_NO_ENTENDI = (
-    "No tengo información sobre tu solicitud.\n"
-    "Podés escribir *MENÚ* para ver las opciones disponibles."
+    "No entendí tu respuesta.\n\n"
+    "Por favor elegí una opción del menú:\n\n"
+    "1 - Información de la carrera\n"
+    "2 - Horarios del trimestre\n"
+    "3 - Comunidad TUCE\n"
+    "4 - Preguntas frecuentes\n"
+    "5 - Sedes UNPAZ\n"
+    "6 - Hablar con un humano"
     + _FOOTER
 )
 
@@ -193,8 +199,13 @@ def _txt_horario_materia(materia: str) -> str:
     resp += "\n"
     for f in filas:
         aula = f[8] if f[8] and f[8] not in ("//", "A confirmar") else "A confirmar"
-        resp += f"👥 *Com {f[1]}* — {f[2]} {f[3][:5]}–{f[4][:5]} hs\n"
-        resp += f"🏢 Aula: {aula} | {f[5]}\n"
+        hora_inicio = f[3][:5]
+        hora_fin    = f[4][:5]
+        resp += f"Comisión {f[1]}\n"
+        resp += f"Día: {f[2]}\n"
+        resp += f"Horario: {hora_inicio} a {hora_fin}\n"
+        resp += f"Modalidad: {f[5]}\n"
+        resp += f"Aula: {aula}\n"
         resp += "──────────\n"
     return resp + _pie("Escribí otra materia o su número para seguir consultando")
 
@@ -375,12 +386,12 @@ def _buscar_faq(texto_norm: str) -> dict | None:
 
 SUBMENU_CARRERA = (
     "📚 *Información de la carrera:*\n\n"
-    "1. 📖 Descripción y perfil egresado\n"
-    "2. 📄 Plan de estudios\n"
-    "3. 🔗 Correlativas\n"
-    "4. 🗓️ Calendario académico\n"
-    "5. 🖥️ Gestión (Campus / SIU Guaraní)\n"
-    "6. 📩 Contactos y Mesa de Ayuda"
+    "1 - Descripción y perfil egresado\n"
+    "2 - Plan de estudios\n"
+    "3 - Correlativas\n"
+    "4 - Calendario académico\n"
+    "5 - Gestión (Campus / SIU Guaraní)\n"
+    "6 - Contactos y Mesa de Ayuda"
 ) + _pie("Escribí el número de la opción")
 
 _KEYWORDS_CARRERA = {
@@ -634,12 +645,12 @@ def procesar(from_id: str, texto: str, firebase_db, responder_ia_fn) -> str:
         _log(firebase_db, "menu")
         return MENU_TEXTO
 
-    if texto_norm in ("cerrar", "salir", "chau", "adios", "hasta luego"):
+    if texto_norm in ("cerrar", "salir", "chau", "adios", "hasta luego", "s"):
         est.salir(from_id)
         _log(firebase_db, "cerrar")
         return MSG_CERRAR.format(nombre=saludo)
 
-    if texto_norm in ("atras", "volver", "anterior"):
+    if texto_norm in ("atras", "volver", "anterior", "v"):
         if seccion == "carrera" and estado.get("esperando") == "correlativa":
             est.entrar(from_id, "carrera")
             return SUBMENU_CARRERA

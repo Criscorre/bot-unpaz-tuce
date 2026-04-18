@@ -12,7 +12,7 @@ def normalizar(texto: str) -> str:
 
 _PALABRAS_MENU = {
     "menu", "manu", "volver", "inicio", "start",
-    "hola", "buenas", "hey", "0", "salir", "atras",
+    "hola", "buenas", "hey", "0", "salir", "atras", "i",
 }
 
 def es_menu(texto: str) -> bool:
