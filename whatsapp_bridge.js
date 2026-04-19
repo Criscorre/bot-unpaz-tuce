@@ -1,5 +1,5 @@
 /**
- * whatsapp_bridge.js — Bot TUCE WhatsApp
+ * whatsapp_bridge.js — Bot TUCE WhatsApp + Sistema de Alertas Bytes Creativos
  * La sesión de WhatsApp se persiste en Firebase para sobrevivir redeploys.
  * Para vincular por primera vez: abrí /qr en el navegador del celu.
  */
@@ -17,10 +17,13 @@ const http    = require("http");
 const fs      = require("fs");
 const admin   = require("firebase-admin");
 
-const WEBHOOK_URL = process.env.WEBHOOK_URL || "http://localhost:5000/wa";
-const PORT        = process.env.PORT || 3000;
-const SESSION_DIR = "auth_info_baileys";
-const FB_SESSION_KEY = "wa_session";
+const WEBHOOK_URL       = process.env.WEBHOOK_URL       || "http://localhost:5000/wa";
+const PORT              = process.env.PORT              || 3000;
+const META_VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || "bytes2024";
+const GRUPO_INTERNO_JID = process.env.GRUPO_INTERNO_JID || "";
+const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN || "";
+const SESSION_DIR       = "auth_info_baileys";
+const FB_SESSION_KEY    = "wa_session";
 
 // ─── Firebase Admin ───────────────────────────────────────────────────────────
 const firebaseJson = process.env.FIREBASE_JSON;
@@ -84,9 +87,156 @@ async function uploadSession() {
 // ─── QR en memoria ────────────────────────────────────────────────────────────
 let qrDataUrl = null;
 
+// ─── Sistema de alertas Bytes Creativos ──────────────────────────────────────
+let sockGlobal = null; // referencia al socket activo
+
+async function sendGroupAlert(text) {
+    if (!sockGlobal) {
+        console.warn("⚠️ Alerta pendiente: bot no conectado aún");
+        return false;
+    }
+    if (!GRUPO_INTERNO_JID) {
+        console.warn("⚠️ GRUPO_INTERNO_JID no configurado en variables de entorno");
+        return false;
+    }
+    try {
+        await sockGlobal.sendMessage(GRUPO_INTERNO_JID, { text });
+        console.log("✅ Alerta enviada al grupo interno");
+        return true;
+    } catch (e) {
+        console.error("❌ Error enviando alerta al grupo:", e.message);
+        return false;
+    }
+}
+
+function formatHora(timestampMs) {
+    return new Date(timestampMs).toLocaleString("es-AR", {
+        timeZone: "America/Argentina/Buenos_Aires",
+        hour:     "2-digit",
+        minute:   "2-digit",
+        day:      "2-digit",
+        month:    "2-digit",
+    });
+}
+
+async function getNombreMeta(senderId) {
+    if (!META_ACCESS_TOKEN) return senderId;
+    try {
+        const r = await axios.get(`https://graph.facebook.com/v19.0/${senderId}`, {
+            params: { fields: "name", access_token: META_ACCESS_TOKEN },
+            timeout: 5000,
+        });
+        return r.data?.name || senderId;
+    } catch (_) {
+        return senderId;
+    }
+}
+
+async function procesarMetaWebhook(body) {
+    const obj = body.object;
+
+    // ── Instagram DM ──
+    if (obj === "instagram") {
+        const msg = body.entry?.[0]?.messaging?.[0];
+        if (!msg?.message || msg.message.is_echo) return;
+        const nombre = await getNombreMeta(msg.sender.id);
+        const texto  = msg.message.text || "[Adjunto/Sticker]";
+        const hora   = formatHora(msg.timestamp * 1000);
+        await sendGroupAlert(
+            `🔔 *NUEVO MENSAJE — Bytes Creativos*\n\n` +
+            `📸 *Instagram DM*\n` +
+            `👤 *De:* ${nombre}\n` +
+            `💬 *Mensaje:* ${texto}\n` +
+            `🕐 *Hora:* ${hora}\n\n` +
+            `🔗 https://www.instagram.com/direct/inbox/`
+        );
+        return;
+    }
+
+    // ── Messenger ──
+    if (obj === "page") {
+        const msg = body.entry?.[0]?.messaging?.[0];
+        if (!msg?.message || msg.message.is_echo) return;
+        const nombre = await getNombreMeta(msg.sender.id);
+        const texto  = msg.message.text || "[Adjunto]";
+        const hora   = formatHora(msg.timestamp);
+        await sendGroupAlert(
+            `🔔 *NUEVO MENSAJE — Bytes Creativos*\n\n` +
+            `💬 *Messenger*\n` +
+            `👤 *De:* ${nombre}\n` +
+            `💬 *Mensaje:* ${texto}\n` +
+            `🕐 *Hora:* ${hora}\n\n` +
+            `🔗 https://business.facebook.com/latest/inbox/all`
+        );
+        return;
+    }
+
+    // ── WhatsApp Business API ──
+    if (obj === "whatsapp_business_account") {
+        const change = body.entry?.[0]?.changes?.[0];
+        if (change?.field !== "messages") return;
+        const value = change.value;
+        const msg   = value?.messages?.[0];
+        if (!msg || msg.type === "reaction") return;
+        const nombre = value.contacts?.[0]?.profile?.name || `+${msg.from}`;
+        const texto  = msg.text?.body || `[${msg.type}]`;
+        const hora   = formatHora(parseInt(msg.timestamp) * 1000);
+        await sendGroupAlert(
+            `🔔 *NUEVO MENSAJE — Bytes Creativos*\n\n` +
+            `🟢 *WhatsApp Business*\n` +
+            `👤 *De:* ${nombre}\n` +
+            `💬 *Mensaje:* ${texto}\n` +
+            `🕐 *Hora:* ${hora}\n\n` +
+            `🔗 https://business.facebook.com/latest/inbox/all`
+        );
+        return;
+    }
+}
+
+// ─── Reporte diario 9am ───────────────────────────────────────────────────────
+async function sendDailyReport() {
+    const hoy = new Date().toLocaleDateString("es-AR", {
+        timeZone: "America/Argentina/Buenos_Aires",
+        weekday: "long", day: "numeric", month: "long",
+    });
+    const hoyStr = hoy.charAt(0).toUpperCase() + hoy.slice(1);
+
+    let reporte  = `📊 *REPORTE DIARIO — Bytes Creativos*\n`;
+    reporte     += `📅 ${hoyStr}\n`;
+    reporte     += `${"─".repeat(28)}\n\n`;
+    reporte     += `📬 *Links rápidos:*\n`;
+    reporte     += `• Bandeja Meta: https://business.facebook.com/latest/inbox/all\n`;
+    reporte     += `• Instagram DMs: https://www.instagram.com/direct/inbox/\n\n`;
+    reporte     += `_¡Buen día equipo! 💪_`;
+
+    await sendGroupAlert(reporte);
+    console.log("📊 Reporte diario enviado");
+}
+
+let reporteScheduled = false;
+
+function scheduleDaily9am() {
+    if (reporteScheduled) return;
+    reporteScheduled = true;
+    function loop() {
+        const now  = new Date();
+        const next = new Date();
+        next.setHours(9, 0, 0, 0);
+        if (next <= now) next.setDate(next.getDate() + 1);
+        const ms = next - now;
+        console.log(`⏰ Próximo reporte diario en ${Math.round(ms / 60000)} minutos`);
+        setTimeout(async () => { await sendDailyReport(); loop(); }, ms);
+    }
+    loop();
+}
+
 // ─── Servidor HTTP ────────────────────────────────────────────────────────────
 http.createServer(async (req, res) => {
-    if (req.method === "POST" && req.url === "/broadcast") {
+    const urlBase = req.url.split("?")[0];
+    const qs      = new URLSearchParams(req.url.includes("?") ? req.url.split("?")[1] : "");
+
+    // ── Broadcast (existente) ──
+    if (req.method === "POST" && urlBase === "/broadcast") {
         let body = "";
         req.on("data", chunk => body += chunk);
         req.on("end", async () => {
@@ -107,7 +257,8 @@ http.createServer(async (req, res) => {
         return;
     }
 
-    if (req.url === "/qr") {
+    // ── QR (existente) ──
+    if (req.method === "GET" && urlBase === "/qr") {
         if (!qrDataUrl) {
             res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
             res.end(`<!DOCTYPE html><html><body style="font-family:sans-serif;text-align:center;padding:40px">
@@ -125,17 +276,74 @@ http.createServer(async (req, res) => {
                 <script>setTimeout(()=>location.reload(), 20000)</script>
             </body></html>`);
         }
-    } else {
-        res.writeHead(200);
-        res.end("OK");
+        return;
     }
+
+    // ── Listar grupos (para obtener JID del grupo interno) ──
+    if (req.method === "GET" && urlBase === "/grupos") {
+        if (!sockGlobal) {
+            res.writeHead(503, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Bot no conectado aún, esperá unos segundos" }));
+            return;
+        }
+        try {
+            const grupos = await sockGlobal.groupFetchAllParticipating();
+            const lista  = Object.values(grupos).map(g => ({
+                jid:           g.id,
+                nombre:        g.subject,
+                participantes: g.participants?.length || 0,
+            }));
+            res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ grupos: lista }, null, 2));
+        } catch (e) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // ── Meta webhook — verificación (GET) ──
+    if (req.method === "GET" && urlBase === "/webhook/meta") {
+        const mode      = qs.get("hub.mode");
+        const token     = qs.get("hub.verify_token");
+        const challenge = qs.get("hub.challenge");
+        if (mode === "subscribe" && token === META_VERIFY_TOKEN) {
+            console.log("✅ Meta webhook verificado correctamente");
+            res.writeHead(200);
+            res.end(challenge);
+        } else {
+            console.warn("⚠️ Verificación Meta fallida — token incorrecto");
+            res.writeHead(403);
+            res.end("Forbidden");
+        }
+        return;
+    }
+
+    // ── Meta webhook — eventos (POST) ──
+    if (req.method === "POST" && urlBase === "/webhook/meta") {
+        let rawBody = "";
+        req.on("data", chunk => { rawBody += chunk; });
+        req.on("end", async () => {
+            res.writeHead(200);
+            res.end("EVENT_RECEIVED");
+            try {
+                const body = JSON.parse(rawBody);
+                await procesarMetaWebhook(body);
+            } catch (e) {
+                console.error("❌ Error procesando webhook Meta:", e.message);
+            }
+        });
+        return;
+    }
+
+    // Default
+    res.writeHead(200);
+    res.end("OK");
 }).listen(PORT, () =>
     console.log(`🌍 Servidor activo en puerto ${PORT} — QR en /qr`)
 );
 
 // ─── Broadcast ────────────────────────────────────────────────────────────────
-let sockGlobal = null;  // referencia al socket activo
-
 async function enviarBroadcast(mensaje) {
     if (!fbDb) throw new Error("Firebase no disponible");
     if (!sockGlobal) throw new Error("WhatsApp no conectado");
@@ -204,10 +412,12 @@ async function startBot() {
         if (connection === "open") {
             qrDataUrl  = null;
             sockGlobal = sock;
-            console.log("✅ WhatsApp conectado — Bot TUCE activo");
-            await uploadSession(); // Guardar sesión completa al conectar
+            console.log("✅ WhatsApp conectado — Bot TUCE + Alertas Bytes activos");
+            await uploadSession();
+            scheduleDaily9am(); // reporte diario a las 9am (se programa una sola vez)
         }
         if (connection === "close") {
+            sockGlobal = null;
             const code = lastDisconnect?.error?.output?.statusCode;
             if (code === DisconnectReason.loggedOut) {
                 console.log("❌ Sesión cerrada. Limpiando y reconectando...");
