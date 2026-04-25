@@ -193,6 +193,70 @@ async function procesarMetaWebhook(body) {
     }
 }
 
+// ─── Frases motivacionales ────────────────────────────────────────────────────
+const FRASES = [
+    { texto: "El secreto del éxito es aprender a usar el dolor y el placer en lugar de que el dolor y el placer te usen a ti.", autor: "Tony Robbins" },
+    { texto: "Si no puedes, debes. Y si debes, puedes.", autor: "Tony Robbins" },
+    { texto: "El éxito es hacer lo ordinario extraordinariamente bien.", autor: "Tony Robbins" },
+    { texto: "No es lo que nos pasa, sino lo que hacemos al respecto lo que importa.", autor: "Tony Robbins" },
+    { texto: "La calidad de tu vida es la calidad de tus relaciones.", autor: "Tony Robbins" },
+    { texto: "Cada problema es un regalo — sin problemas no crecemos.", autor: "Tony Robbins" },
+    { texto: "Los ganadores toman decisiones de inmediato y las cambian lentamente. Los perdedores toman decisiones lentamente y las cambian de inmediato.", autor: "Tony Robbins" },
+    { texto: "El éxito no es accidental. Es trabajo duro, perseverancia, aprendizaje, estudio, sacrificio y sobre todo, amor por lo que estás haciendo.", autor: "Tony Robbins" },
+    { texto: "No hay fracasos, solo resultados.", autor: "Tony Robbins" },
+    { texto: "La acción es la base del éxito.", autor: "Tony Robbins" },
+    { texto: "Vende el problema que resolvés, no el producto que tenés.", autor: "Alex Hormozi" },
+    { texto: "El dinero que dejás de gastar es dinero que ya ganaste.", autor: "Alex Hormozi" },
+    { texto: "La diferencia entre los que tienen éxito y los que no, es cuánto dolor están dispuestos a soportar.", autor: "Alex Hormozi" },
+    { texto: "No necesitás más ideas, necesitás ejecutar mejor las que ya tenés.", autor: "Alex Hormozi" },
+    { texto: "El volumen cura la mayoría de los problemas de negocio.", autor: "Alex Hormozi" },
+    { texto: "La única forma de perder es dejar de jugar.", autor: "Alex Hormozi" },
+    { texto: "Si tus clientes no obtienen resultados, tu negocio no sobrevive.", autor: "Alex Hormozi" },
+    { texto: "Hacé la oferta tan buena que sea estúpido decir que no.", autor: "Alex Hormozi" },
+    { texto: "Los ricos resuelven problemas. Los pobres evitan problemas.", autor: "Alex Hormozi" },
+    { texto: "Trabajá en el negocio que tenés, no en el que querés tener.", autor: "Alex Hormozi" },
+    { texto: "La consistencia es la clave. Cualquiera puede hacerlo bien un día.", autor: "Alex Hormozi" },
+    { texto: "Tu red de contactos determina tu patrimonio neto.", autor: "Alex Hormozi" },
+];
+
+function getFraseDelDia() {
+    const idx = new Date().getDate() % FRASES.length;
+    return FRASES[idx];
+}
+
+// ─── Clima de José C. Paz ─────────────────────────────────────────────────────
+async function getClima() {
+    try {
+        const r = await axios.get("https://wttr.in/Jose+C+Paz,Buenos+Aires?format=j1", {
+            timeout: 8000,
+            headers: { "User-Agent": "BytesCreativosBot/1.0" },
+        });
+        const cc   = r.data.current_condition[0];
+        const desc = cc.lang_es?.[0]?.value || cc.weatherDesc[0].value;
+        const temp = cc.temp_C;
+        const sens = cc.FeelsLikeC;
+        const hum  = cc.humidity;
+
+        // Pronóstico de hoy
+        const pronostico = r.data.weather[0];
+        const maxTemp    = pronostico.maxtempC;
+        const minTemp    = pronostico.mintempC;
+
+        const emoji = parseInt(temp) >= 25 ? "☀️" :
+                      parseInt(temp) >= 15 ? "⛅" :
+                      parseInt(temp) >= 8  ? "🌥️" : "🥶";
+
+        return `${emoji} *Clima — José C. Paz*\n` +
+               `🌡️ Ahora: ${temp}°C (sensación ${sens}°C)\n` +
+               `📊 Min/Max: ${minTemp}°C / ${maxTemp}°C\n` +
+               `💧 Humedad: ${hum}%\n` +
+               `☁️ ${desc}`;
+    } catch (e) {
+        console.error("❌ Error obteniendo clima:", e.message);
+        return "🌤️ *Clima:* no disponible ahora";
+    }
+}
+
 // ─── Reporte diario 9am ───────────────────────────────────────────────────────
 async function sendDailyReport() {
     const hoy = new Date().toLocaleDateString("es-AR", {
@@ -201,13 +265,21 @@ async function sendDailyReport() {
     });
     const hoyStr = hoy.charAt(0).toUpperCase() + hoy.slice(1);
 
-    let reporte  = `📊 *REPORTE DIARIO — Bytes Creativos*\n`;
+    const frase = getFraseDelDia();
+    const clima = await getClima();
+
+    let reporte  = `🌅 *¡Buenos días, equipo Bytes!*\n`;
     reporte     += `📅 ${hoyStr}\n`;
     reporte     += `${"─".repeat(28)}\n\n`;
-    reporte     += `📬 *Links rápidos:*\n`;
-    reporte     += `• Bandeja Meta: https://business.facebook.com/latest/inbox/all\n`;
-    reporte     += `• Instagram DMs: https://www.instagram.com/direct/inbox/\n\n`;
-    reporte     += `_¡Buen día equipo! 💪_`;
+    reporte     += `💬 *"${frase.texto}"*\n`;
+    reporte     += `— _${frase.autor}_\n\n`;
+    reporte     += `${"─".repeat(28)}\n\n`;
+    reporte     += `${clima}\n\n`;
+    reporte     += `${"─".repeat(28)}\n\n`;
+    reporte     += `📬 *Bandeja de mensajes:*\n`;
+    reporte     += `• Meta: https://business.facebook.com/latest/inbox/all\n`;
+    reporte     += `• Instagram: https://www.instagram.com/direct/inbox/\n\n`;
+    reporte     += `_¡A romperla hoy! 💪🚀_`;
 
     await sendGroupAlert(reporte);
     console.log("📊 Reporte diario enviado");
