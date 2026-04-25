@@ -426,6 +426,14 @@ http.createServer(async (req, res) => {
         return;
     }
 
+    // ── Test reporte diario ──
+    if (req.method === "GET" && urlBase === "/test-reporte") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, mensaje: "Enviando reporte de prueba..." }));
+        sendDailyReport();
+        return;
+    }
+
     // Default
     res.writeHead(200);
     res.end("OK");
