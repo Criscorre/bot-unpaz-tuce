@@ -311,7 +311,7 @@ function scheduleDaily9am() {
     function loop() {
         const now  = new Date();
         const next = new Date();
-        next.setHours(9, 0, 0, 0);
+        next.setHours(7, 0, 0, 0);
         if (next <= now) next.setDate(next.getDate() + 1);
         const ms = next - now;
         console.log(`⏰ Próximo reporte diario en ${Math.round(ms / 60000)} minutos`);
@@ -423,14 +423,6 @@ http.createServer(async (req, res) => {
                 console.error("❌ Error procesando webhook Meta:", e.message);
             }
         });
-        return;
-    }
-
-    // ── Test reporte diario ──
-    if (req.method === "GET" && urlBase === "/test-reporte") {
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true, mensaje: "Enviando reporte de prueba..." }));
-        sendDailyReport();
         return;
     }
 
