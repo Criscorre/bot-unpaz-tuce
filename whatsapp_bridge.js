@@ -91,22 +91,9 @@ let qrDataUrl = null;
 let sockGlobal = null; // referencia al socket activo
 
 async function sendGroupAlert(text) {
-    if (!sockGlobal) {
-        console.warn("⚠️ Alerta pendiente: bot no conectado aún");
-        return false;
-    }
-    if (!GRUPO_INTERNO_JID) {
-        console.warn("⚠️ GRUPO_INTERNO_JID no configurado en variables de entorno");
-        return false;
-    }
-    try {
-        await sockGlobal.sendMessage(GRUPO_INTERNO_JID, { text });
-        console.log("✅ Alerta enviada al grupo interno");
-        return true;
-    } catch (e) {
-        console.error("❌ Error enviando alerta al grupo:", e.message);
-        return false;
-    }
+    // ⏸️ SISTEMA DE ALERTAS DESACTIVADO — activar cuando sea necesario
+    console.log("⏸️ Alerta omitida (sistema desactivado):", text.substring(0, 60));
+    return false;
 }
 
 function formatHora(timestampMs) {
